@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Market Intelligence AI</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <!-- 헤더 -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">◈</span>
+        <span class="logo-text">Market Intelligence AI</span>
+      </div>
+      <div class="header-nav">
+        <button class="nav-btn active" data-view="home">새 분석</button>
+        <button class="nav-btn" data-view="sessions">분석 이력</button>
+      </div>
+      <div id="api-status" class="api-badge loading">확인 중...</div>
+    </div>
+  </header>
+
+  <!-- 메인 컨텐츠 -->
+  <main class="main">
+
+    <!-- ── 홈 뷰: 분석 시작 ── -->
+    <div id="view-home" class="view active">
+
+      <!-- 입력 패널 -->
+      <section class="input-section card">
+        <h2 class="section-title">리서치 설정</h2>
+        <form id="analysis-form">
+
+          <div class="form-group">
+            <label for="topic">리서치 주제 <span class="required">*</span></label>
+            <input type="text" id="topic" placeholder="예: 국내 핀테크 시장, 글로벌 AI 에이전트 동향"
+              required class="input-lg" />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="industries">분석 산업 (쉼표 구분)</label>
+              <input type="text" id="industries" placeholder="AI, fintech, crypto, blockchain" />
+            </div>
+            <div class="form-group">
+              <label for="companies">분석 대상 기업 (쉼표 구분)</label>
+              <input type="text" id="companies" placeholder="Coinbase, Binance, Upbit" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="regions">대상 지역</label>
+              <input type="text" id="regions" value="KR, US, Global" />
+            </div>
+            <div class="form-group">
+              <label for="date-range">데이터 수집 기간: <span id="date-range-label">90</span>일</label>
+              <input type="range" id="date-range" value="90" min="7" max="365" step="7"
+                class="range-slider" oninput="document.getElementById('date-range-label').textContent=this.value" />
+              <div class="range-hints"><span>7일</span><span>90일</span><span>180일</span><span>365일</span></div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="instructions">추가 지시사항</label>
+            <textarea id="instructions" rows="2"
+              placeholder="특정 분석 관점이나 추가 요청사항을 입력하세요"></textarea>
+          </div>
+
+          <button type="submit" id="start-btn" class="btn-primary btn-lg">
+            <span class="btn-icon">▶</span> MI 분석 시작
+          </button>
+        </form>
+      </section>
+
+      <!-- 에이전트 구성도 -->
+      <section class="agents-overview card">
+        <h2 class="section-title">14개 에이전트 구성</h2>
+        <div class="phases-grid" id="agents-grid">
+          <!-- JS로 동적 생성 -->
+          <div class="loading-placeholder">에이전트 정보 로딩 중...</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ── 분석 진행 뷰 ── -->
+    <div id="view-progress" class="view">
+      <div class="progress-header card">
+        <div class="progress-info">
+          <h2 id="progress-topic" class="progress-title"></h2>
+          <div class="progress-meta">
+            <span id="progress-session-id" class="meta-item"></span>
+            <span id="progress-elapsed" class="meta-item"></span>
+          </div>
+        </div>
+        <div class="progress-actions">
+          <div class="overall-progress">
+            <div class="progress-bar-wrap">
+              <div id="overall-bar" class="progress-bar" style="width:0%"></div>
+            </div>
+            <span id="overall-pct" class="progress-pct">0%</span>
+          </div>
+          <button id="cancel-btn" class="btn-danger">
+            <span>■</span> 분석 중지
+          </button>
+        </div>
+      </div>
+
+      <!-- 에이전트 상태 그리드 -->
+      <div class="agent-status-grid card">
+        <h3 class="section-title">에이전트 실행 현황</h3>
+        <div id="agent-cards" class="agent-cards">
+          <!-- JS로 동적 생성 -->
+        </div>
+      </div>
+
+      <!-- 실시간 로그 -->
+      <div class="log-panel card">
+        <div class="log-header">
+          <h3 class="section-title">실시간 로그</h3>
+          <button id="clear-log" class="btn-sm">지우기</button>
+        </div>
+        <div id="log-output" class="log-output"></div>
+      </div>
+    </div>
+
+    <!-- ── 결과 뷰 ── -->
+    <div id="view-result" class="view">
+      <div class="result-header card">
+        <div>
+          <h2 id="result-topic" class="result-title"></h2>
+          <div class="result-meta">
+            <span id="result-duration"></span>
+            <span id="result-agents"></span>
+            <span id="result-tokens"></span>
+          </div>
+        </div>
+        <div class="result-actions">
+          <div class="download-group">
+            <button id="print-report-btn" class="btn-primary">
+              <span>🖨️</span> PDF 저장
+            </button>
+            <button id="download-md-btn" class="btn-secondary">
+              <span>⬇</span> MD 다운로드
+            </button>
+          </div>
+          <button id="new-analysis-btn" class="btn-primary">새 분석 시작</button>
+        </div>
+      </div>
+
+      <!-- 탭 -->
+      <div class="tabs card">
+        <button class="tab active" data-tab="summary">Executive Summary</button>
+        <button class="tab" data-tab="report">상세 리포트</button>
+        <button class="tab" data-tab="dashboard">대시보드</button>
+        <button class="tab" data-tab="agents">에이전트별 결과</button>
+      </div>
+
+      <div id="tab-summary" class="tab-content active card">
+        <div id="exec-summary-content" class="markdown-body"></div>
+      </div>
+
+      <div id="tab-report" class="tab-content card">
+        <div id="report-content" class="markdown-body"></div>
+      </div>
+
+      <div id="tab-dashboard" class="tab-content card">
+        <div id="dashboard-metrics" class="metrics-grid"></div>
+        <div id="dashboard-alerts" class="alerts-list"></div>
+        <div id="dashboard-charts" class="charts-grid"></div>
+      </div>
+
+      <div id="tab-agents" class="tab-content card">
+        <div id="agent-results-list"></div>
+      </div>
+    </div>
+
+    <!-- ── 이력 뷰 ── -->
+    <div id="view-sessions" class="view">
+      <div class="card">
+        <h2 class="section-title">분석 이력</h2>
+        <div id="sessions-list" class="sessions-list">
+          <p class="empty-msg">분석 이력이 없습니다.</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
