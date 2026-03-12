@@ -65,8 +65,8 @@ class ReportAgent(BaseAgent):
                 "quality": output.quality.overall.value if output.quality else "unknown",
             }
             if output.analysis:
-                # 각 에이전트 분석 전문 전달 (최대 6000자)
-                report_data["key_analyses"][agent_id] = output.analysis[:6000]
+                # 각 에이전트 분석 전문 전달 (최대 8000자)
+                report_data["key_analyses"][agent_id] = output.analysis[:8000]
 
         return report_data
 
@@ -120,16 +120,16 @@ McKinsey/BCG 수준의 시장 조사 리포트를 작성하세요.
 {all_summaries}
 
 ## 핵심 인사이트 (Insight Agent)
-{insight_analysis[:5000]}
+{insight_analysis[:6000]}
 
 ## 시장 분석 (Market Analysis Agent)
-{market_analysis[:5000]}
+{market_analysis[:6000]}
 
 ## 경쟁 분석 (Competitor Agent)
-{competitor_analysis[:5000]}
+{competitor_analysis[:6000]}
 
 ## 기업 정보 (Company Agent)
-{company_analysis[:3000]}
+{company_analysis[:4000]}
 
 위 데이터를 바탕으로 **Part 1** 을 작성하세요. 각 소섹션을 최소 400자 이상 서술하고, 표는 빈 셀 없이 채우세요.
 
@@ -304,19 +304,19 @@ McKinsey/BCG 수준의 시장 조사 리포트를 작성하세요.
 분석 기간: 최근 {date_range}일
 
 ## 전략 시사점 (Strategy Agent)
-{strategy_analysis[:5000]}
+{strategy_analysis[:6000]}
 
 ## 규제 환경 분석 (Regulatory Agent)
-{regulatory_analysis[:5000]}
+{regulatory_analysis[:6000]}
 
 ## 기술 트렌드 분석 (Tech Agent)
-{tech_analysis[:5000]}
+{tech_analysis[:6000]}
 
 ## 사업 기회 분석 (BizModel Agent)
-{bizmodel_analysis[:5000]}
+{bizmodel_analysis[:6000]}
 
 ## 뉴스 & 미디어 분석 (News Agent)
-{news_analysis[:3000]}
+{news_analysis[:4000]}
 
 위 데이터를 바탕으로 **Part 2** 를 작성하세요. 각 소섹션을 최소 400자 이상 서술하고, 표는 빈 셀 없이 채우세요.
 
@@ -516,16 +516,16 @@ McKinsey/BCG 수준의 시장 조사 리포트를 작성하세요.
 분석 기간: 최근 {date_range}일
 
 ## 인사이트 종합 (Insight Agent)
-{insight_analysis[:4000]}
+{insight_analysis[:6000]}
 
 ## 뉴스 & 미디어 분석 (News Agent)
-{news_analysis[:5000]}
+{news_analysis[:6000]}
 
 ## 규제 상세 (Regulatory Agent)
-{regulatory_analysis[:3000]}
+{regulatory_analysis[:5000]}
 
 ## 기술 상세 (Tech Agent)
-{tech_analysis[:3000]}
+{tech_analysis[:5000]}
 
 위 데이터를 바탕으로 **Part 3 (부록 및 보완 자료)** 를 작성하세요. 각 섹션을 최대한 상세하게 작성하세요.
 

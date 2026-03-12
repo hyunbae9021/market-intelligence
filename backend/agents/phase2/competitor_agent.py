@@ -96,7 +96,7 @@ class CompetitorAgent(BaseAgent):
 {exchange_text if exchange_text else '데이터 없음'}
 
 ## Phase 1 기업 분석 요약
-{(company_analysis or '')[:2500]}
+{(company_analysis or '')[:6000]}
 
 위 데이터를 바탕으로 아래 형식의 경쟁사 분석 리포트를 작성하세요.
 
@@ -227,7 +227,7 @@ class CompetitorAgent(BaseAgent):
 - 단기 (0~6개월): [구체적 대응 행동]
 - 중기 (6~18개월): [전략적 포지션 강화 방향]
 """
-        return await self._claude(system, prompt, max_tokens=8192)
+        return await self._claude(system, prompt, max_tokens=16000)
 
     async def validate(self, output, context: AgentContext) -> QualityReport:
         checks = []

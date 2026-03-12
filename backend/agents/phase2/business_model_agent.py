@@ -69,10 +69,10 @@ class BusinessModelAgent(BaseAgent):
 분석 산업: {', '.join(context.scope.industries or ['크립토', 'DeFi', 'fintech'])}
 
 ## Phase 2 시장 분석 요약
-{(market_analysis or '')[:1500]}
+{(market_analysis or '')[:4000]}
 
 ## Phase 2 경쟁사 분석 요약
-{(competitor_analysis or '')[:1000]}
+{(competitor_analysis or '')[:3000]}
 
 위 분석을 바탕으로 밸류체인 분석 및 사업 기회 리포트를 작성하세요:
 

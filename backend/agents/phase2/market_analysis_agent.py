@@ -66,6 +66,7 @@ class MarketAnalysisAgent(BaseAgent):
 
     async def analyze(self, context: AgentContext, raw_data: Dict[str, Any]) -> str:
         industry_analysis = raw_data.get("industry_analysis", "")
+        news_analysis = raw_data.get("news_analysis", "")
         scope = raw_data.get("scope", {})
 
         # 시장 데이터 요약
@@ -91,7 +92,10 @@ class MarketAnalysisAgent(BaseAgent):
 글로벌 크립토 시장 총 시가총액: ${market_cap/1e9:.0f}B
 
 ## Phase 1 산업 분석 결과
-{(industry_analysis or '')[:2500]}
+{(industry_analysis or '')[:6000]}
+
+## Phase 1 뉴스 & 미디어 분석 (시장 센티멘트)
+{(news_analysis or '')[:3000]}
 
 위 데이터를 바탕으로 다음 형식의 심층 시장 분석 리포트를 작성하세요:
 

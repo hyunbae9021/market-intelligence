@@ -147,7 +147,7 @@ class CompanyAgent(BaseAgent):
 | 기업명 | 국가 | 강점 | 최근 동향 | 위협도 |
 |--------|------|------|----------|--------|
 """
-        return await self._claude(system, prompt, max_tokens=8000)
+        return await self._claude(system, prompt, max_tokens=16000)
 
     async def validate(self, output, context: AgentContext) -> QualityReport:
         checks = []

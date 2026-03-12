@@ -198,7 +198,7 @@ class NewsAgent(BaseAgent):
 - 주요 뉴스 해당: [N건]
 - 정보 공백 (기사 없음): [해당 탭 명시]
 """
-        return await self._claude(system, prompt, max_tokens=8000)
+        return await self._claude(system, prompt, max_tokens=16000)
 
     async def validate(self, output, context: AgentContext) -> QualityReport:
         checks = []
