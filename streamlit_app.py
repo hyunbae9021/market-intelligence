@@ -301,7 +301,12 @@ async def run_analysis():
 
 
 try:
-    session = asyncio.run(run_analysis())
+    _loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(_loop)
+    try:
+        session = _loop.run_until_complete(run_analysis())
+    finally:
+        _loop.close()
 except Exception as e:
     import traceback
     st.error(f"분석 실행 오류: {e}")
