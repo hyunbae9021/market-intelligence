@@ -202,17 +202,20 @@ class BaseAgent(ABC):
         user_prompt: str,
         max_tokens: int = 8192,
     ) -> str:
-        """Claude API 호출 공통 메서드"""
+        """Claude API 호출 공통 메서드 (streaming)"""
         if not self._client:
             return "[Claude API 키가 설정되지 않았습니다. .env 파일에 ANTHROPIC_API_KEY를 설정해주세요.]"
 
-        response = await self._client.messages.create(
+        chunks: list[str] = []
+        async with self._client.messages.stream(
             model="claude-opus-4-6",
             max_tokens=max_tokens,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
-        )
-        return response.content[0].text
+        ) as stream:
+            async for text in stream.text_stream:
+                chunks.append(text)
+        return "".join(chunks)
 
     async def _generate_summary(self, context: AgentContext, analysis: str) -> str:
         """분석 결과에서 핵심 요약 생성"""
