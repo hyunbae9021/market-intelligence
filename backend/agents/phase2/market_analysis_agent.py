@@ -164,7 +164,7 @@ class MarketAnalysisAgent(BaseAgent):
 | 기회 영역 | 예상 규모 | 진입 난이도 | 당사 역량 적합도 | 우선순위 |
 |---------|---------|-----------|--------------|--------|
 """
-        return await self._claude(system, prompt, max_tokens=8192)
+        return await self._claude(system, prompt, max_tokens=16000)
 
     async def validate(self, output, context: AgentContext) -> QualityReport:
         checks = []

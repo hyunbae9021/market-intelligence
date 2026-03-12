@@ -170,7 +170,7 @@ class StrategyAgent(BaseAgent):
 > **메시지 2**: (수치 포함 핵심 리스크)
 > **메시지 3**: (즉각 결정이 필요한 사항)
 """
-        return await self._claude(system, prompt, max_tokens=12000)
+        return await self._claude(system, prompt, max_tokens=16000)
 
     async def validate(self, output, context: AgentContext) -> QualityReport:
         checks = []

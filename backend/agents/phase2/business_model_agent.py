@@ -126,7 +126,7 @@ class BusinessModelAgent(BaseAgent):
 - 진출 고려 영역
 - 파트너십 대상 영역
 """
-        return await self._claude(system, prompt, max_tokens=8192)
+        return await self._claude(system, prompt, max_tokens=16000)
 
     async def validate(self, output, context: AgentContext) -> QualityReport:
         checks = []

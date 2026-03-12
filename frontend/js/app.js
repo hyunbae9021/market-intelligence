@@ -144,8 +144,8 @@ async function startAnalysis() {
     initProgressView(topic, session_id);
     showView('progress');
 
-    // 3. WebSocket 연결
-    connectWebSocket(session_id);
+    // 3. WebSocket 연결 — open 확인 후 run 호출
+    await connectWebSocket(session_id);
 
     // 4. 분석 실행
     await fetch(`${API}/api/sessions/${session_id}/run`, { method: 'POST' });
@@ -228,21 +228,32 @@ function updateAgentCard(agentId, state, message, progress) {
   }
 }
 
-// ── WebSocket ──
+// ── WebSocket — 연결 완료(open)를 기다리는 Promise 반환 ──
 function connectWebSocket(sessionId) {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const wsUrl = `${proto}://${location.host}/ws/${sessionId}`;
+  return new Promise((resolve) => {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const wsUrl = `${proto}://${location.host}/ws/${sessionId}`;
 
-  if (ws) ws.close();
-  ws = new WebSocket(wsUrl);
+    if (ws) ws.close();
+    ws = new WebSocket(wsUrl);
 
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-    handleWSMessage(msg);
-  };
+    ws.onopen = () => {
+      addLog('info', 'WebSocket', '연결됨');
+      resolve();
+    };
 
-  ws.onerror = () => addLog('error', 'WebSocket', '연결 오류');
-  ws.onclose = () => addLog('warn', 'WebSocket', '연결 종료');
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      handleWSMessage(msg);
+    };
+
+    ws.onerror = () => {
+      addLog('error', 'WebSocket', '연결 오류');
+      resolve(); // 오류여도 run은 진행
+    };
+
+    ws.onclose = () => addLog('warn', 'WebSocket', '연결 종료');
+  });
 }
 
 function handleWSMessage(msg) {

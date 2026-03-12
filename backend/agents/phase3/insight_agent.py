@@ -173,7 +173,7 @@ class InsightAgent(BaseAgent):
 | 기술 성숙도 | | | |
 | **종합** | | | |
 """
-        return await self._claude(system, prompt, max_tokens=12000)
+        return await self._claude(system, prompt, max_tokens=16000)
 
     async def validate(self, output, context: AgentContext) -> QualityReport:
         checks = []
