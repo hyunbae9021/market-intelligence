@@ -207,6 +207,7 @@ class BaseAgent(ABC):
             return "[Claude API 키가 설정되지 않았습니다. .env 파일에 ANTHROPIC_API_KEY를 설정해주세요.]"
 
         chunks: list[str] = []
+        chunk_count = 0
         async with self._client.messages.stream(
             model="claude-opus-4-6",
             max_tokens=max_tokens,
@@ -215,6 +216,12 @@ class BaseAgent(ABC):
         ) as stream:
             async for text in stream.text_stream:
                 chunks.append(text)
+                chunk_count += 1
+                # 200 청크마다 Streamlit WebSocket에 keepalive 업데이트 전송
+                # (스트리밍 중 연결이 끊기지 않도록)
+                if chunk_count % 200 == 0:
+                    total_chars = sum(len(c) for c in chunks)
+                    await self._notify(f"AI 생성 중... ({total_chars:,}자 완료)", 0.5)
         return "".join(chunks)
 
     async def _generate_summary(self, context: AgentContext, analysis: str) -> str:
