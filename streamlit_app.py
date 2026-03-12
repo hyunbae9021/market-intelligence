@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
+import time
 from datetime import datetime
 
 import streamlit as st
@@ -293,7 +295,22 @@ async def run_analysis():
     return await orch.run(scope=scope, session_id="streamlit-run")
 
 
+# 경과 시간 타이머 (1초마다 갱신)
+_stop_timer = threading.Event()
+
+def _timer_loop():
+    while not _stop_timer.is_set():
+        elapsed = int((datetime.now() - start_time).total_seconds())
+        m, s = elapsed // 60, elapsed % 60
+        elapsed_disp.caption(f"경과: {m}분 {s}초")
+        time.sleep(1)
+
+_timer_thread = threading.Thread(target=_timer_loop, daemon=True)
+_timer_thread.start()
+
 session = asyncio.run(run_analysis())
+
+_stop_timer.set()
 
 # ── 분석 이력 저장 ───────────────────────────────────────────────────
 duration_sec = (datetime.now() - start_time).total_seconds()
