@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import os
 import threading
+import time
 from datetime import datetime
 
 import streamlit as st
@@ -24,13 +25,11 @@ st.markdown("""
 html, body, [class*="css"] { font-family: 'Pretendard', -apple-system, sans-serif !important; }
 .stApp { background: #F7F8FA; }
 
-/* 에이전트 행 기본 */
 .agent-row { padding: 6px 14px; border-radius: 8px; margin: 3px 0; font-size: 14px; transition: all 0.3s ease; }
 .agent-done    { background: #F0FDF4; border-left: 3px solid #0ABF76; }
 .agent-pending { background: #F1F5F9; border-left: 3px solid #CBD5E1; color: #94A3B8; }
 .agent-error   { background: #FFF1F2; border-left: 3px solid #F04452; }
 
-/* 실행 중 에이전트 — 맥박 애니메이션 */
 @keyframes pulse-border {
   0%,100% { border-left-color: #1B3BFF; background: #EEF2FF; }
   50%      { border-left-color: #7C9FFF; background: #F5F7FF; }
@@ -49,7 +48,6 @@ html, body, [class*="css"] { font-family: 'Pretendard', -apple-system, sans-seri
   animation: spin 1s linear infinite;
 }
 
-/* 상단 진행 점 애니메이션 */
 @keyframes blink {
   0%,80%,100% { opacity: 0.2; transform: scale(0.8); }
   40%         { opacity: 1;   transform: scale(1.1); }
@@ -109,11 +107,6 @@ os.environ["ANTHROPIC_API_KEY"] = api_key
 if "history" not in st.session_state:
     st.session_state["history"] = []
 
-# ── 메인 UI ────────────────────────────────────────────────────────
-st.markdown("# 📊 Market Intelligence AI")
-st.caption("두나무 경영혁신실 · 14개 AI 에이전트 멀티스테이지 분석 플랫폼")
-st.divider()
-
 AGENT_ORDER = [
     ("p1_pmo",       "PMO Agent",              1),
     ("p1_news",      "뉴스 & 미디어 모니터링",    1),
@@ -131,7 +124,167 @@ AGENT_ORDER = [
     ("p4_dashboard", "시각화 & 대시보드",         4),
 ]
 
-# ── 입력 폼 ─────────────────────────────────────────────────────────
+
+# ── Session state 헬퍼 ────────────────────────────────────────────────
+def _add_log(level: str, agent: str, message: str):
+    now = datetime.now().strftime("%H:%M:%S")
+    icon = {"info": "ℹ️", "success": "✅", "warn": "⚠️", "error": "❌"}.get(level, "ℹ️")
+    line = f"`{now}` {icon} **[{agent}]** {message}"
+    logs = st.session_state.get("_log_lines", [])
+    logs.append(line)
+    st.session_state["_log_lines"] = logs[-100:]  # 최대 100줄
+
+
+def _render_agent_rows() -> str:
+    agent_states = st.session_state.get("_agent_states", {})
+    rows = []
+    for aid, aname, phase in AGENT_ORDER:
+        state = agent_states.get(aid, "pending")
+        css = {"pending": "agent-pending", "running": "agent-running",
+               "done": "agent-done", "error": "agent-error"}.get(state, "agent-pending")
+        if state == "running":
+            icon_html = "<span class='spin-icon'>⟳</span>"
+        else:
+            icon_html = {"pending": "○", "done": "✓", "error": "✗"}.get(state, "○")
+        rows.append(f"<div class='agent-row {css}'>{icon_html} <b>Phase {phase}</b> · {aname}</div>")
+    return "\n".join(rows)
+
+
+# ── 분석 진행 화면 ────────────────────────────────────────────────────
+def show_analysis_screen():
+    topic = st.session_state.get("_topic", "")
+    is_done = st.session_state.get("_analysis_done", False)
+    is_error = st.session_state.get("_analysis_error")
+    pct = st.session_state.get("_progress_pct", 0)
+    completed_count = st.session_state.get("_completed_count", 0)
+    current_agent_name = st.session_state.get("_current_agent", "준비 중...")
+
+    st.markdown(f"## 📊 {topic}")
+
+    status_col1, status_col2, status_col3, status_col4 = st.columns(4)
+
+    if is_done and not is_error:
+        status_col1.success("✅ **분석 완료**")
+    elif is_error:
+        status_col1.error("❌ **분석 실패**")
+    else:
+        status_col1.markdown(
+            "<div style='background:#EEF2FF;border-radius:8px;padding:8px 12px;"
+            "font-size:14px;font-weight:600;color:#1B3BFF'>"
+            "🔄 분석 실행 중 <span class='dot-pulse'><span></span><span></span><span></span></span></div>",
+            unsafe_allow_html=True
+        )
+
+    status_col2.caption(f"현재: **{current_agent_name}**")
+    status_col4.caption(f"완료: **{completed_count} / 14**")
+
+    _ts = st.session_state.get("_start_time_ts", int(time.time() * 1000))
+    with status_col3:
+        components.html(f"""
+        <div id="mi-timer" style="font-size:13px;color:#555;font-family:sans-serif;padding:4px 0">경과: 0분 0초</div>
+        <script>
+        var _s={_ts};
+        function _tick(){{
+            var e=Math.floor((Date.now()-_s)/1000),m=Math.floor(e/60),s=e%60;
+            var el=document.getElementById('mi-timer');
+            if(el) el.textContent='경과: '+m+'분 '+s+'초';
+        }}
+        setInterval(_tick,1000); _tick();
+        </script>
+        """, height=35)
+
+    if is_done:
+        st.progress(100, text="✅ 분석 완료!")
+    else:
+        st.progress(max(int(pct), 1), text=f"⟳ {current_agent_name}... ({pct:.0f}%)")
+
+    st.markdown(_render_agent_rows(), unsafe_allow_html=True)
+
+    with st.expander("📋 실시간 로그", expanded=not is_done):
+        log_lines = st.session_state.get("_log_lines", [])
+        st.markdown("\n\n".join(log_lines[-50:]) if log_lines else "_로그 없음_")
+
+    if is_error:
+        st.error(f"분석 오류: {is_error}")
+        if st.button("새 분석 시작"):
+            st.session_state["_analysis_active"] = False
+            st.rerun()
+        return
+
+    if is_done:
+        session = st.session_state.get("_analysis_session")
+        if not session:
+            st.warning("분석 세션 데이터가 없습니다.")
+            return
+
+        # 이력 저장 (중복 방지)
+        if not st.session_state.get("_history_saved"):
+            duration_sec = (time.time() - _ts / 1000)
+            st.session_state["history"].append({
+                "topic": topic,
+                "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "date_range_label": st.session_state.get("_date_label", ""),
+                "date_range": st.session_state.get("_date_range", 90),
+                "duration": duration_sec,
+                "executive_summary": session.executive_summary,
+                "final_report": session.final_report,
+            })
+            st.session_state["_history_saved"] = True
+
+        st.divider()
+        tab1, tab2, tab3 = st.tabs(["📋 Executive Summary", "📄 전체 리포트", "🔍 에이전트별 결과"])
+
+        with tab1:
+            st.markdown(session.executive_summary or "요약 없음")
+
+        with tab2:
+            report_md = session.final_report or ""
+            st.download_button(
+                "⬇️ Markdown 다운로드",
+                data=report_md.encode("utf-8"),
+                file_name=f"MI_{topic[:20].replace(' ','_')}_{datetime.now().strftime('%Y%m%d')}.md",
+                mime="text/markdown",
+            )
+            st.markdown(report_md)
+
+        with tab3:
+            for aid, aname, phase in AGENT_ORDER:
+                if aid not in session.agent_results:
+                    continue
+                output = session.agent_results[aid]
+                quality = output.quality.overall.value if output.quality else "unknown"
+                badge = {"pass": "🟢", "warning": "🟡", "fail": "🔴"}.get(quality, "⚪")
+                with st.expander(f"{badge} Phase {phase} · {aname}"):
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("수집 데이터", f"{output.data_points_collected}건")
+                    c2.metric("소요 시간",   f"{output.duration_seconds:.1f}초")
+                    c3.metric("품질",        quality.upper())
+                    st.caption(f"**요약**: {output.summary}")
+                    st.divider()
+                    st.markdown(output.analysis or "분석 내용 없음")
+
+        st.divider()
+        if st.button("🔄 새 분석 시작"):
+            st.session_state["_analysis_active"] = False
+            st.rerun()
+        return
+
+    # 아직 실행 중 — 0.5초 후 재실행
+    time.sleep(0.5)
+    st.rerun()
+
+
+# ── 분석 중이면 분석 화면으로 ────────────────────────────────────────
+if st.session_state.get("_analysis_active"):
+    show_analysis_screen()
+    st.stop()
+
+
+# ── 메인 UI (입력 폼) ────────────────────────────────────────────────
+st.markdown("# 📊 Market Intelligence AI")
+st.caption("두나무 경영혁신실 · 14개 AI 에이전트 멀티스테이지 분석 플랫폼")
+st.divider()
+
 with st.form("analysis_form"):
     topic = st.text_input("리서치 주제 *",
         placeholder="예: 국내 스테이블코인 시장 동향, 글로벌 가상자산 거래소 경쟁 구도")
@@ -159,278 +312,154 @@ with st.form("analysis_form"):
 
     submitted = st.form_submit_button("🚀 MI 분석 시작", use_container_width=True, type="primary")
 
-# ── 분석 전: 에이전트 소개 + 이력 ──────────────────────────────────
-if not submitted or not topic:
-    main_tab, history_tab = st.tabs(["🤖 에이전트 구성", "📂 분석 이력"])
 
-    with main_tab:
-        st.markdown("### 14개 분석 에이전트 구성")
-        cols = st.columns(4)
-        phases = {
-            "🔵 Phase 1 · 데이터 수집": [a[1] for a in AGENT_ORDER if a[2] == 1],
-            "🟣 Phase 2 · 심층 분석":   [a[1] for a in AGENT_ORDER if a[2] == 2],
-            "🟢 Phase 3 · 종합":        [a[1] for a in AGENT_ORDER if a[2] == 3],
-            "🟡 Phase 4 · 산출물":      [a[1] for a in AGENT_ORDER if a[2] == 4],
-        }
-        for i, (phase, agents) in enumerate(phases.items()):
-            with cols[i]:
-                st.markdown(f"**{phase}**")
-                for a in agents:
-                    st.markdown(f"<div class='agent-row agent-pending'>● {a}</div>",
-                                unsafe_allow_html=True)
+# ── 폼 제출 시 분석 시작 ──────────────────────────────────────────────
+if submitted and topic:
+    target_companies = [c.strip() for c in companies_input.split(",") if c.strip()]
+    industries = [i.strip() for i in industries_input.split(",") if i.strip()] or \
+                 ["crypto", "fintech", "AI"]
 
-    with history_tab:
-        history = st.session_state["history"]
-        if not history:
-            st.info("아직 분석 기록이 없습니다. 위에서 주제를 입력하고 분석을 시작하세요.")
-        else:
-            st.markdown(f"### 총 {len(history)}건의 분석 기록")
-            for idx, h in enumerate(reversed(history)):
-                real_idx = len(history) - 1 - idx
-                dur_m = int(h["duration"] // 60)
-                dur_s = int(h["duration"] % 60)
-                label = f"**{h['date']}** · {h['topic']} · {h['date_range_label']} · {dur_m}분 {dur_s}초 소요"
-                with st.expander(label):
-                    t1, t2, t3 = st.tabs(["📋 Executive Summary", "📄 전체 리포트", "⬇️ 다운로드"])
-                    with t1:
-                        st.markdown(h["executive_summary"] or "요약 없음")
-                    with t2:
-                        st.markdown(h["final_report"] or "")
-                    with t3:
-                        report_md = h["final_report"] or ""
-                        fname = f"MI_{h['topic'][:20].replace(' ','_')}_{h['date'][:10].replace('-','')}.md"
-                        st.download_button(
-                            "⬇️ Markdown 다운로드",
-                            data=report_md.encode("utf-8"),
-                            file_name=fname,
-                            mime="text/markdown",
-                            key=f"dl_{real_idx}",
-                        )
-                    if st.button("🗑️ 이 기록 삭제", key=f"del_{real_idx}"):
-                        st.session_state["history"].pop(real_idx)
-                        st.rerun()
+    # Session state 초기화
+    st.session_state["_analysis_active"] = True
+    st.session_state["_analysis_done"] = False
+    st.session_state["_analysis_error"] = None
+    st.session_state["_analysis_session"] = None
+    st.session_state["_history_saved"] = False
+    st.session_state["_topic"] = topic
+    st.session_state["_date_label"] = date_label
+    st.session_state["_date_range"] = date_range
+    st.session_state["_start_time_ts"] = int(time.time() * 1000)
+    st.session_state["_agent_states"] = {}
+    st.session_state["_log_lines"] = []
+    st.session_state["_progress_pct"] = 0
+    st.session_state["_current_agent"] = "준비 중..."
+    st.session_state["_completed_count"] = 0
 
-    st.stop()
+    # 백그라운드 스레드 시작
+    from backend.models.schemas import ResearchScope, WSMessage, WSMessageType
 
-
-# ── 분석 실행 ────────────────────────────────────────────────────────
-target_companies = [c.strip() for c in companies_input.split(",") if c.strip()]
-industries = [i.strip() for i in industries_input.split(",") if i.strip()] or \
-             ["crypto", "fintech", "AI"]
-
-start_time = datetime.now()
-st.markdown(f"## 📊 {topic}")
-
-# 상단 상태 바
-status_col1, status_col2, status_col3, status_col4 = st.columns(4)
-status_badge  = status_col1.empty()
-current_agent = status_col2.empty()
-done_count    = status_col4.empty()
-
-status_badge.markdown(
-    "<div style='background:#EEF2FF;border-radius:8px;padding:8px 12px;font-size:14px;font-weight:600;color:#1B3BFF'>"
-    "🔄 분석 실행 중 <span class='dot-pulse'><span></span><span></span><span></span></span></div>",
-    unsafe_allow_html=True
-)
-current_agent.caption("현재: 준비 중...")
-done_count.caption("완료: 0 / 14")
-
-# JavaScript 타이머 — 브라우저에서 1초마다 갱신
-_ts = int(start_time.timestamp() * 1000)
-with status_col3:
-    components.html(f"""
-    <div id="mi-timer" style="font-size:13px;color:#555;font-family:sans-serif;padding:4px 0">경과: 0분 0초</div>
-    <script>
-    var _s={_ts};
-    function _tick(){{
-        var e=Math.floor((Date.now()-_s)/1000),m=Math.floor(e/60),s=e%60;
-        var el=document.getElementById('mi-timer');
-        if(el) el.textContent='경과: '+m+'분 '+s+'초';
-    }}
-    setInterval(_tick,1000); _tick();
-    </script>
-    """, height=35)
-
-progress_bar    = st.progress(0, text="준비 중...")
-agent_panel     = st.empty()
-log_expander    = st.expander("📋 실시간 로그", expanded=True)
-log_placeholder = log_expander.empty()
-
-agent_states: dict[str, str] = {}
-log_lines: list[str] = []
-completed = [0]
-
-
-def render_agents():
-    rows = []
-    for aid, aname, phase in AGENT_ORDER:
-        state = agent_states.get(aid, "pending")
-        css  = {"pending": "agent-pending", "running": "agent-running",
-                "done": "agent-done", "error": "agent-error"}.get(state, "agent-pending")
-        if state == "running":
-            icon_html = "<span class='spin-icon'>⟳</span>"
-        else:
-            icon_html = {"pending": "○", "done": "✓", "error": "✗"}.get(state, "○")
-        rows.append(
-            f"<div class='agent-row {css}'>{icon_html} <b>Phase {phase}</b> · {aname}</div>"
-        )
-    agent_panel.markdown("\n".join(rows), unsafe_allow_html=True)
-
-
-def add_log(level: str, agent: str, message: str):
-    now  = datetime.now().strftime("%H:%M:%S")
-    icon = {"info": "ℹ️", "success": "✅", "warn": "⚠️", "error": "❌"}.get(level, "ℹ️")
-    log_lines.append(f"`{now}` {icon} **[{agent}]** {message}")
-    log_placeholder.markdown("\n\n".join(log_lines[-50:]))
-
-
-render_agents()
-
-
-# ── 비동기 실행 ──────────────────────────────────────────────────────
-from backend.models.schemas import ResearchScope, WSMessage, WSMessageType
-
-scope = ResearchScope(
-    topic=topic,
-    industries=industries,
-    target_companies=target_companies,
-    date_range_days=date_range,
-)
-
-
-
-async def run_analysis():
-    from backend.orchestrator.mi_orchestrator import MIOrchestrator
-
-    orch = MIOrchestrator(api_key=api_key)
-
-    async def ws_cb(msg: WSMessage):
-        aid   = msg.agent_id or ""
-        aname = msg.agent_name or "시스템"
-        pct   = msg.progress_pct or 0
-
-        if msg.type == WSMessageType.AGENT_START:
-            agent_states[aid] = "running"
-            render_agents()
-            progress_bar.progress(max(int(pct), 2), text=f"⟳ {aname} 실행 중...")
-            current_agent.caption(f"현재: **{aname}**")
-            add_log("info", aname, "시작")
-
-        elif msg.type == WSMessageType.AGENT_PROGRESS:
-            progress_bar.progress(max(int(pct), 2), text=f"⟳ {aname}: {msg.message or ''}")
-            current_agent.caption(f"현재: **{aname}** — {msg.message or ''}")
-
-        elif msg.type == WSMessageType.AGENT_COMPLETE:
-            agent_states[aid] = "done"
-            completed[0] += 1
-            render_agents()
-            dp  = (msg.data or {}).get("data_points", 0)
-            dur = (msg.data or {}).get("duration", 0)
-            progress_bar.progress(int(pct), text=f"✓ {aname} 완료 ({pct:.0f}%)")
-            done_count.caption(f"완료: **{completed[0]} / 14**")
-            add_log("success", aname, f"완료 — {dp}개 데이터, {dur:.1f}초")
-
-        elif msg.type == WSMessageType.AGENT_ERROR:
-            agent_states[aid] = "error"
-            render_agents()
-            add_log("error", aname, msg.message or "오류 발생")
-
-        elif msg.type == WSMessageType.SESSION_COMPLETE:
-            progress_bar.progress(100, text="✅ 분석 완료!")
-            status_badge.success("✅ **분석 완료**")
-            current_agent.caption("모든 에이전트 완료")
-            done_count.caption(f"완료: **14 / 14**")
-            add_log("success", "시스템", "MI 분석 완료!")
-
-        elif msg.type == WSMessageType.LOG:
-            add_log("info", "시스템", msg.message or "")
-
-    orch.set_ws_callback(ws_cb)
-    return await orch.run(scope=scope, session_id="streamlit-run")
-
-
-# ── 백그라운드 스레드에서 asyncio 실행 (Streamlit Cloud 호환) ──────────
-_ctx = get_script_run_ctx()
-_result: dict = {"session": None, "error": None}
-_done = threading.Event()
-
-
-def _run_analysis_thread():
-    add_script_run_ctx(threading.current_thread(), _ctx)
-    _loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(_loop)
-    try:
-        _result["session"] = _loop.run_until_complete(run_analysis())
-    except Exception as exc:
-        _result["error"] = exc
-    finally:
-        try:
-            _loop.close()
-        except Exception:
-            pass
-        _done.set()
-
-
-_t = threading.Thread(target=_run_analysis_thread, daemon=True)
-_t.start()
-_timed_out = not _done.wait(timeout=2700)  # 45분 타임아웃
-
-if _timed_out:
-    st.error("분석이 45분을 초과했습니다. 더 짧은 분석 기간을 선택하거나 다시 시도해 주세요.")
-    st.stop()
-
-if _result["error"]:
-    import traceback as _tb
-    st.error(f"분석 실행 오류: {_result['error']}")
-    st.code(_tb.format_exc())
-    st.stop()
-
-session = _result["session"]
-
-# ── 분석 이력 저장 ───────────────────────────────────────────────────
-duration_sec = (datetime.now() - start_time).total_seconds()
-st.session_state["history"].append({
-    "topic": topic,
-    "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-    "date_range_label": date_label,
-    "date_range": date_range,
-    "duration": duration_sec,
-    "executive_summary": session.executive_summary,
-    "final_report": session.final_report,
-})
-
-progress_bar.progress(100, text="✅ 분석 완료!")
-st.success(f"분석 완료!")
-st.divider()
-
-# ── 결과 탭 ──────────────────────────────────────────────────────────
-tab1, tab2, tab3 = st.tabs(["📋 Executive Summary", "📄 전체 리포트", "🔍 에이전트별 결과"])
-
-with tab1:
-    st.markdown(session.executive_summary or "요약 없음")
-
-with tab2:
-    report_md = session.final_report or ""
-    st.download_button(
-        "⬇️ Markdown 다운로드",
-        data=report_md.encode("utf-8"),
-        file_name=f"MI_{topic[:20].replace(' ','_')}_{datetime.now().strftime('%Y%m%d')}.md",
-        mime="text/markdown",
+    scope = ResearchScope(
+        topic=topic,
+        industries=industries,
+        target_companies=target_companies,
+        date_range_days=date_range,
     )
-    st.markdown(report_md)
 
-with tab3:
-    for aid, aname, phase in AGENT_ORDER:
-        if aid not in session.agent_results:
-            continue
-        output  = session.agent_results[aid]
-        quality = output.quality.overall.value if output.quality else "unknown"
-        badge   = {"pass": "🟢", "warning": "🟡", "fail": "🔴"}.get(quality, "⚪")
-        with st.expander(f"{badge} Phase {phase} · {aname}"):
-            c1, c2, c3 = st.columns(3)
-            c1.metric("수집 데이터", f"{output.data_points_collected}건")
-            c2.metric("소요 시간",   f"{output.duration_seconds:.1f}초")
-            c3.metric("품질",        quality.upper())
-            st.caption(f"**요약**: {output.summary}")
-            st.divider()
-            st.markdown(output.analysis or "분석 내용 없음")
+    _ctx = get_script_run_ctx()
+
+    async def run_analysis():
+        from backend.orchestrator.mi_orchestrator import MIOrchestrator
+        orch = MIOrchestrator(api_key=api_key)
+
+        async def ws_cb(msg: WSMessage):
+            try:
+                aid = msg.agent_id or ""
+                aname = msg.agent_name or "시스템"
+                pct = msg.progress_pct or 0
+
+                if msg.type == WSMessageType.AGENT_START:
+                    st.session_state["_agent_states"][aid] = "running"
+                    st.session_state["_current_agent"] = aname
+                    _add_log("info", aname, "시작")
+
+                elif msg.type == WSMessageType.AGENT_PROGRESS:
+                    st.session_state["_progress_pct"] = pct
+                    st.session_state["_current_agent"] = f"{aname} — {msg.message or ''}"
+
+                elif msg.type == WSMessageType.AGENT_COMPLETE:
+                    st.session_state["_agent_states"][aid] = "done"
+                    st.session_state["_completed_count"] = \
+                        st.session_state.get("_completed_count", 0) + 1
+                    st.session_state["_progress_pct"] = pct
+                    dp = (msg.data or {}).get("data_points", 0)
+                    dur = (msg.data or {}).get("duration", 0)
+                    _add_log("success", aname, f"완료 — {dp}개 데이터, {dur:.1f}초")
+
+                elif msg.type == WSMessageType.AGENT_ERROR:
+                    st.session_state["_agent_states"][aid] = "error"
+                    _add_log("error", aname, msg.message or "오류 발생")
+
+                elif msg.type == WSMessageType.SESSION_COMPLETE:
+                    st.session_state["_progress_pct"] = 100
+                    _add_log("success", "시스템", "MI 분석 완료!")
+
+                elif msg.type == WSMessageType.LOG:
+                    _add_log("info", "시스템", msg.message or "")
+
+            except Exception:
+                pass  # ws_cb 오류가 분석 스레드에 영향 없도록
+
+        orch.set_ws_callback(ws_cb)
+        return await orch.run(scope=scope, session_id="streamlit-run")
+
+    def _run_thread():
+        add_script_run_ctx(threading.current_thread(), _ctx)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            session = loop.run_until_complete(run_analysis())
+            st.session_state["_analysis_session"] = session
+        except Exception as exc:
+            st.session_state["_analysis_error"] = str(exc)
+        finally:
+            try:
+                loop.close()
+            except Exception:
+                pass
+            st.session_state["_analysis_done"] = True
+
+    t = threading.Thread(target=_run_thread, daemon=True)
+    t.start()
+
+    st.rerun()
+
+
+# ── 분석 전: 에이전트 소개 + 이력 ──────────────────────────────────
+main_tab, history_tab = st.tabs(["🤖 에이전트 구성", "📂 분석 이력"])
+
+with main_tab:
+    st.markdown("### 14개 분석 에이전트 구성")
+    cols = st.columns(4)
+    phases = {
+        "🔵 Phase 1 · 데이터 수집": [a[1] for a in AGENT_ORDER if a[2] == 1],
+        "🟣 Phase 2 · 심층 분석":   [a[1] for a in AGENT_ORDER if a[2] == 2],
+        "🟢 Phase 3 · 종합":        [a[1] for a in AGENT_ORDER if a[2] == 3],
+        "🟡 Phase 4 · 산출물":      [a[1] for a in AGENT_ORDER if a[2] == 4],
+    }
+    for i, (phase, agents) in enumerate(phases.items()):
+        with cols[i]:
+            st.markdown(f"**{phase}**")
+            for a in agents:
+                st.markdown(f"<div class='agent-row agent-pending'>● {a}</div>",
+                            unsafe_allow_html=True)
+
+with history_tab:
+    history = st.session_state["history"]
+    if not history:
+        st.info("아직 분석 기록이 없습니다. 위에서 주제를 입력하고 분석을 시작하세요.")
+    else:
+        st.markdown(f"### 총 {len(history)}건의 분석 기록")
+        for idx, h in enumerate(reversed(history)):
+            real_idx = len(history) - 1 - idx
+            dur_m = int(h["duration"] // 60)
+            dur_s = int(h["duration"] % 60)
+            label = f"**{h['date']}** · {h['topic']} · {h['date_range_label']} · {dur_m}분 {dur_s}초 소요"
+            with st.expander(label):
+                t1, t2, t3 = st.tabs(["📋 Executive Summary", "📄 전체 리포트", "⬇️ 다운로드"])
+                with t1:
+                    st.markdown(h["executive_summary"] or "요약 없음")
+                with t2:
+                    st.markdown(h["final_report"] or "")
+                with t3:
+                    report_md = h["final_report"] or ""
+                    fname = f"MI_{h['topic'][:20].replace(' ','_')}_{h['date'][:10].replace('-','')}.md"
+                    st.download_button(
+                        "⬇️ Markdown 다운로드",
+                        data=report_md.encode("utf-8"),
+                        file_name=fname,
+                        mime="text/markdown",
+                        key=f"dl_{real_idx}",
+                    )
+                if st.button("🗑️ 이 기록 삭제", key=f"del_{real_idx}"):
+                    st.session_state["history"].pop(real_idx)
+                    st.rerun()
