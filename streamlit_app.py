@@ -23,11 +23,45 @@ st.markdown("""
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
 html, body, [class*="css"] { font-family: 'Pretendard', -apple-system, sans-serif !important; }
 .stApp { background: #F7F8FA; }
-.agent-row { padding: 6px 14px; border-radius: 8px; margin: 3px 0; font-size: 14px; }
-.agent-running { background: #EEF2FF; border-left: 3px solid #1B3BFF; }
+
+/* 에이전트 행 기본 */
+.agent-row { padding: 6px 14px; border-radius: 8px; margin: 3px 0; font-size: 14px; transition: all 0.3s ease; }
 .agent-done    { background: #F0FDF4; border-left: 3px solid #0ABF76; }
 .agent-pending { background: #F1F5F9; border-left: 3px solid #CBD5E1; color: #94A3B8; }
 .agent-error   { background: #FFF1F2; border-left: 3px solid #F04452; }
+
+/* 실행 중 에이전트 — 맥박 애니메이션 */
+@keyframes pulse-border {
+  0%,100% { border-left-color: #1B3BFF; background: #EEF2FF; }
+  50%      { border-left-color: #7C9FFF; background: #F5F7FF; }
+}
+@keyframes spin {
+  from { display:inline-block; transform: rotate(0deg); }
+  to   { display:inline-block; transform: rotate(360deg); }
+}
+.agent-running {
+  background: #EEF2FF;
+  border-left: 3px solid #1B3BFF;
+  animation: pulse-border 1.6s ease-in-out infinite;
+}
+.agent-running .spin-icon {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+/* 상단 진행 점 애니메이션 */
+@keyframes blink {
+  0%,80%,100% { opacity: 0.2; transform: scale(0.8); }
+  40%         { opacity: 1;   transform: scale(1.1); }
+}
+.dot-pulse span {
+  display: inline-block; width: 6px; height: 6px;
+  border-radius: 50%; background: #1B3BFF; margin: 0 2px;
+  animation: blink 1.4s infinite ease-in-out;
+}
+.dot-pulse span:nth-child(2) { animation-delay: 0.2s; }
+.dot-pulse span:nth-child(3) { animation-delay: 0.4s; }
+
 .watermark { position: fixed; bottom: 16px; right: 20px; font-size: 11px; color: #9CA3AF; pointer-events: none; }
 </style>
 <div class="watermark">DUNAMU 경영혁신실 · Confidential</div>
@@ -193,7 +227,11 @@ status_badge  = status_col1.empty()
 current_agent = status_col2.empty()
 done_count    = status_col4.empty()
 
-status_badge.info("🔄 **분석 실행 중**")
+status_badge.markdown(
+    "<div style='background:#EEF2FF;border-radius:8px;padding:8px 12px;font-size:14px;font-weight:600;color:#1B3BFF'>"
+    "🔄 분석 실행 중 <span class='dot-pulse'><span></span><span></span><span></span></span></div>",
+    unsafe_allow_html=True
+)
 current_agent.caption("현재: 준비 중...")
 done_count.caption("완료: 0 / 14")
 
@@ -229,9 +267,12 @@ def render_agents():
         state = agent_states.get(aid, "pending")
         css  = {"pending": "agent-pending", "running": "agent-running",
                 "done": "agent-done", "error": "agent-error"}.get(state, "agent-pending")
-        icon = {"pending": "○", "running": "⟳", "done": "✓", "error": "✗"}.get(state, "○")
+        if state == "running":
+            icon_html = "<span class='spin-icon'>⟳</span>"
+        else:
+            icon_html = {"pending": "○", "done": "✓", "error": "✗"}.get(state, "○")
         rows.append(
-            f"<div class='agent-row {css}'>{icon} <b>Phase {phase}</b> · {aname}</div>"
+            f"<div class='agent-row {css}'>{icon_html} <b>Phase {phase}</b> · {aname}</div>"
         )
     agent_panel.markdown("\n".join(rows), unsafe_allow_html=True)
 
