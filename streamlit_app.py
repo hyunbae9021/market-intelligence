@@ -4,9 +4,7 @@ Market Intelligence AI — Streamlit Cloud 배포용
 from __future__ import annotations
 
 import asyncio
-import io
 import os
-import re
 import threading
 import time
 from datetime import datetime
@@ -133,160 +131,6 @@ AGENT_ORDER = [
 ]
 
 
-# ── PDF 생성 ─────────────────────────────────────────────────────────
-def generate_pdf(topic: str, report_md: str) -> bytes:
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.units import cm
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-    from reportlab.platypus import (HRFlowable, Paragraph, SimpleDocTemplate,
-                                    Spacer, Table, TableStyle)
-
-    # 한국어 CID 폰트 (ReportLab 내장)
-    pdfmetrics.registerFont(UnicodeCIDFont("HYSMyeongJo-Medium"))
-    font = "HYSMyeongJo-Medium"
-
-    def S(name, **kw):
-        return ParagraphStyle(name, fontName=font, **kw)
-
-    styles = {
-        "cover_title": S("ct", fontSize=22, leading=30, spaceAfter=8, textColor=colors.HexColor("#1B3BFF")),
-        "cover_sub":   S("cs", fontSize=13, leading=18, spaceAfter=4, textColor=colors.HexColor("#555555")),
-        "h1": S("h1", fontSize=15, leading=22, spaceBefore=14, spaceAfter=6, textColor=colors.HexColor("#111827")),
-        "h2": S("h2", fontSize=12, leading=18, spaceBefore=10, spaceAfter=4, textColor=colors.HexColor("#1e3a8a")),
-        "h3": S("h3", fontSize=11, leading=16, spaceBefore=8,  spaceAfter=3, textColor=colors.HexColor("#374151")),
-        "body": S("bd", fontSize=9.5, leading=15, spaceAfter=3),
-        "bullet": S("bl", fontSize=9.5, leading=15, spaceAfter=2, leftIndent=14, firstLineIndent=-8),
-        "quote": S("qt", fontSize=9.5, leading=15, spaceAfter=3, leftIndent=16,
-                   textColor=colors.HexColor("#374151"), borderPad=4),
-    }
-
-    def md_inline(text: str) -> str:
-        """인라인 마크다운 → ReportLab XML"""
-        text = re.sub(r"\*\*\*(.*?)\*\*\*", r"<b><i>\1</i></b>", text)
-        text = re.sub(r"\*\*(.*?)\*\*",     r"<b>\1</b>", text)
-        text = re.sub(r"\*(.*?)\*",         r"<i>\1</i>", text)
-        text = re.sub(r"`(.*?)`",           r"\1", text)
-        text = text.replace("&", "&amp;").replace("<b>", "\x00B\x00").replace("</b>", "\x00/B\x00") \
-                   .replace("<i>", "\x00I\x00").replace("</i>", "\x00/I\x00")
-        text = text.replace("<", "&lt;").replace(">", "&gt;")
-        text = text.replace("\x00B\x00", "<b>").replace("\x00/B\x00", "</b>") \
-                   .replace("\x00I\x00", "<i>").replace("\x00/I\x00", "</i>")
-        return text
-
-    story = []
-
-    # 표지
-    story.append(Spacer(1, 2 * cm))
-    story.append(Paragraph("Market Intelligence Report", styles["cover_title"]))
-    story.append(Paragraph(topic, styles["cover_sub"]))
-    story.append(Paragraph(f"작성일: {datetime.now().strftime('%Y년 %m월 %d일')}", styles["cover_sub"]))
-    story.append(Paragraph("DUNAMU 경영혁신실 · Confidential", styles["cover_sub"]))
-    story.append(Spacer(1, 0.5 * cm))
-    story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#1B3BFF")))
-    story.append(Spacer(1, 0.5 * cm))
-
-    # 본문 파싱
-    lines = report_md.split("\n")
-    i = 0
-    while i < len(lines):
-        raw = lines[i]
-        line = raw.strip()
-
-        # 구분선
-        if re.match(r"^-{3,}$", line):
-            story.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey, spaceAfter=4))
-            i += 1
-            continue
-
-        # 헤더
-        m = re.match(r"^(#{1,3})\s+(.*)", line)
-        if m:
-            level = len(m.group(1))
-            text = md_inline(m.group(2))
-            style = {1: "h1", 2: "h2", 3: "h3"}.get(level, "h3")
-            story.append(Paragraph(text, styles[style]))
-            i += 1
-            continue
-
-        # 인용
-        if line.startswith("> "):
-            story.append(Paragraph(md_inline(line[2:]), styles["quote"]))
-            i += 1
-            continue
-
-        # 테이블 — 행 단위로 수집
-        if line.startswith("|"):
-            rows = []
-            while i < len(lines) and lines[i].strip().startswith("|"):
-                cols = [c.strip() for c in lines[i].strip().split("|")]
-                cols = [c for c in cols if c != ""]  # 앞뒤 빈 셀 제거
-                if cols and not re.match(r"^[-:]+$", cols[0]):
-                    rows.append(cols)
-                i += 1
-            if rows:
-                max_cols = max(len(r) for r in rows)
-                # 열 너비 균등 분배
-                col_w = [(14 * cm) / max_cols] * max_cols
-                table_data = []
-                for r_idx, row in enumerate(rows):
-                    padded = row + [""] * (max_cols - len(row))
-                    cell_style = styles["body"]
-                    table_data.append([Paragraph(md_inline(c), cell_style) for c in padded])
-                tbl = Table(table_data, colWidths=col_w, repeatRows=1)
-                tbl.setStyle(TableStyle([
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EEF2FF")),
-                    ("TEXTCOLOR",  (0, 0), (-1, 0), colors.HexColor("#1B3BFF")),
-                    ("FONTNAME",   (0, 0), (-1, -1), font),
-                    ("FONTSIZE",   (0, 0), (-1, -1), 8),
-                    ("GRID",       (0, 0), (-1, -1), 0.4, colors.HexColor("#D1D5DB")),
-                    ("VALIGN",     (0, 0), (-1, -1), "MIDDLE"),
-                    ("ROWBACKGROUNDS", (0, 1), (-1, -1),
-                     [colors.white, colors.HexColor("#F9FAFB")]),
-                    ("TOPPADDING",    (0, 0), (-1, -1), 3),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-                    ("LEFTPADDING",   (0, 0), (-1, -1), 4),
-                    ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
-                ]))
-                story.append(tbl)
-                story.append(Spacer(1, 0.2 * cm))
-            continue
-
-        # 불릿
-        if re.match(r"^[-*]\s+", line):
-            story.append(Paragraph("• " + md_inline(line[2:].strip()), styles["bullet"]))
-            i += 1
-            continue
-
-        # 번호 목록
-        m = re.match(r"^\d+\.\s+(.*)", line)
-        if m:
-            story.append(Paragraph("• " + md_inline(m.group(1)), styles["bullet"]))
-            i += 1
-            continue
-
-        # 빈 줄
-        if not line:
-            story.append(Spacer(1, 0.15 * cm))
-            i += 1
-            continue
-
-        # 일반 텍스트
-        story.append(Paragraph(md_inline(line), styles["body"]))
-        i += 1
-
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf, pagesize=A4,
-        leftMargin=2 * cm, rightMargin=2 * cm,
-        topMargin=2 * cm, bottomMargin=2 * cm,
-        title=f"MI Report — {topic}",
-        author="DUNAMU 경영혁신실",
-    )
-    doc.build(story)
-    return buf.getvalue()
 
 
 # ── HTML 인쇄용 렌더러 (브라우저 print → PDF, 한국어 완벽 지원) ────────
@@ -446,10 +290,10 @@ def show_analysis_screen():
             report_md = session.final_report or ""
             fname_base = f"MI_{topic[:20].replace(' ','_')}_{datetime.now().strftime('%Y%m%d')}"
             completed_str = datetime.now().strftime("%Y년 %m월 %d일")
-            dl_col1, dl_col2, dl_col3 = st.columns(3)
+            dl_col1, dl_col2 = st.columns(2)
             with dl_col1:
                 st.download_button(
-                    "🖨️ HTML 다운로드 (브라우저 인쇄 → PDF)",
+                    "🖨️ HTML 다운로드 (브라우저에서 열어 Ctrl+P → PDF 저장)",
                     data=generate_print_html(topic, report_md, completed_str).encode("utf-8"),
                     file_name=f"{fname_base}.html",
                     mime="text/html",
@@ -457,14 +301,6 @@ def show_analysis_screen():
                     type="primary",
                 )
             with dl_col2:
-                st.download_button(
-                    "⬇️ PDF 다운로드",
-                    data=generate_pdf(topic, report_md),
-                    file_name=f"{fname_base}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                )
-            with dl_col3:
                 st.download_button(
                     "⬇️ Markdown 다운로드",
                     data=report_md.encode("utf-8"),
@@ -717,13 +553,13 @@ with history_tab:
                     hc1, hc2 = st.columns(2)
                     with hc1:
                         st.download_button(
-                            "⬇️ PDF 다운로드",
-                            data=generate_pdf(h["topic"], report_md),
-                            file_name=f"{fname_base}.pdf",
-                            mime="application/pdf",
+                            "🖨️ HTML 다운로드 (Ctrl+P → PDF)",
+                            data=generate_print_html(h["topic"], report_md).encode("utf-8"),
+                            file_name=f"{fname_base}.html",
+                            mime="text/html",
                             use_container_width=True,
                             type="primary",
-                            key=f"pdf_{real_idx}",
+                            key=f"html_{real_idx}",
                         )
                     with hc2:
                         st.download_button(
