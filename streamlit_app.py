@@ -9,6 +9,7 @@ import threading
 from datetime import datetime
 
 import streamlit as st
+import streamlit.components.v1 as components
 from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 
 st.set_page_config(
@@ -190,13 +191,27 @@ st.markdown(f"## 📊 {topic}")
 status_col1, status_col2, status_col3, status_col4 = st.columns(4)
 status_badge  = status_col1.empty()
 current_agent = status_col2.empty()
-elapsed_disp  = status_col3.empty()
 done_count    = status_col4.empty()
 
 status_badge.info("🔄 **분석 실행 중**")
 current_agent.caption("현재: 준비 중...")
-elapsed_disp.caption(f"시작: {start_time.strftime('%H:%M:%S')}")
 done_count.caption("완료: 0 / 14")
+
+# JavaScript 타이머 — 브라우저에서 1초마다 갱신
+_ts = int(start_time.timestamp() * 1000)
+with status_col3:
+    components.html(f"""
+    <div id="mi-timer" style="font-size:13px;color:#555;font-family:sans-serif;padding:4px 0">경과: 0분 0초</div>
+    <script>
+    var _s={_ts};
+    function _tick(){{
+        var e=Math.floor((Date.now()-_s)/1000),m=Math.floor(e/60),s=e%60;
+        var el=document.getElementById('mi-timer');
+        if(el) el.textContent='경과: '+m+'분 '+s+'초';
+    }}
+    setInterval(_tick,1000); _tick();
+    </script>
+    """, height=35)
 
 progress_bar    = st.progress(0, text="준비 중...")
 agent_panel     = st.empty()
@@ -223,9 +238,6 @@ def render_agents():
 
 def add_log(level: str, agent: str, message: str):
     now  = datetime.now().strftime("%H:%M:%S")
-    elapsed = int((datetime.now() - start_time).total_seconds())
-    m, s = elapsed // 60, elapsed % 60
-    elapsed_disp.caption(f"경과: {m}분 {s}초")
     icon = {"info": "ℹ️", "success": "✅", "warn": "⚠️", "error": "❌"}.get(level, "ℹ️")
     log_lines.append(f"`{now}` {icon} **[{agent}]** {message}")
     log_placeholder.markdown("\n\n".join(log_lines[-50:]))
@@ -245,11 +257,6 @@ scope = ResearchScope(
 )
 
 
-def _update_elapsed():
-    elapsed = int((datetime.now() - start_time).total_seconds())
-    m, s = elapsed // 60, elapsed % 60
-    elapsed_disp.caption(f"경과: {m}분 {s}초")
-
 
 async def run_analysis():
     from backend.orchestrator.mi_orchestrator import MIOrchestrator
@@ -260,7 +267,6 @@ async def run_analysis():
         aid   = msg.agent_id or ""
         aname = msg.agent_name or "시스템"
         pct   = msg.progress_pct or 0
-        _update_elapsed()
 
         if msg.type == WSMessageType.AGENT_START:
             agent_states[aid] = "running"
