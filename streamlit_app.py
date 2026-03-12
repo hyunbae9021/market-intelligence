@@ -300,13 +300,16 @@ async def run_analysis():
     return await orch.run(scope=scope, session_id="streamlit-run")
 
 
+add_log("info", "시스템", "이벤트 루프 시작 중...")
 try:
     _loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(_loop)
     try:
         session = _loop.run_until_complete(run_analysis())
     finally:
-        _loop.close()
+        try:
+            _loop.close()
+        except Exception:
+            pass
 except Exception as e:
     import traceback
     st.error(f"분석 실행 오류: {e}")
