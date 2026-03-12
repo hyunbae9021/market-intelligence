@@ -376,7 +376,7 @@ class ReportAgent(BaseAgent):
 ---
 """
         await self._notify("Part 1 생성 중 (표지/Executive Summary/시장/경쟁 분석)...", 0.3)
-        part1 = await self._claude(system, prompt_part1, max_tokens=8192)
+        part1 = await self._claude(system, prompt_part1, max_tokens=16000)
 
         # ── Part 2: 규제/기술 + 사업 기회 + 전략 권고 ──
         prompt_part2 = f"""
@@ -666,7 +666,7 @@ class ReportAgent(BaseAgent):
 ---
 """
         await self._notify("Part 2 생성 중 (규제/기술/사업기회/전략)...", 0.6)
-        part2 = await self._claude(system, prompt_part2, max_tokens=8192)
+        part2 = await self._claude(system, prompt_part2, max_tokens=16000)
 
         # ── Part 3: 상세 데이터 + 뉴스 클리핑 + 부록 ──
         prompt_part3 = f"""
@@ -908,7 +908,7 @@ class ReportAgent(BaseAgent):
 *DUNAMU 경영혁신실 — Confidential*
 """
         await self._notify("Part 3 생성 중 (뉴스 클리핑/인사이트/부록)...", 0.85)
-        part3 = await self._claude(system, prompt_part3, max_tokens=8192)
+        part3 = await self._claude(system, prompt_part3, max_tokens=12000)
 
         # ── 세 파트 합치기 ──
         final = f"""{part1}
