@@ -44,7 +44,7 @@ class ResearchScope(BaseModel):
     industries: List[str] = Field(default_factory=list, description="분석 대상 산업")
     target_companies: List[str] = Field(default_factory=list, description="분석 대상 기업")
     regions: List[str] = Field(default=["KR", "US", "Global"], description="대상 지역")
-    date_range_days: int = Field(default=90, ge=7, le=365, description="데이터 수집 기간 (일, 7~365)")
+    date_range_days: int = Field(default=90, ge=7, le=1095, description="데이터 수집 기간 (일, 7~1095)")
     language: str = Field(default="ko", description="주요 언어")
     custom_instructions: Optional[str] = Field(None, description="추가 지시사항")
 

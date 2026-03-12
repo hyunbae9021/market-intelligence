@@ -104,6 +104,12 @@ if not api_key:
     st.stop()
 os.environ["ANTHROPIC_API_KEY"] = api_key
 
+# 외부 API 키 — secrets에 설정하면 에이전트가 자동으로 사용
+for _k in ("COINGECKO_API_KEY", "DART_API_KEY", "GITHUB_TOKEN", "CRYPTOPANIC_KEY"):
+    _v = st.secrets.get(_k, "")
+    if _v:
+        os.environ[_k] = _v
+
 
 # ── 이력 초기화 ─────────────────────────────────────────────────────
 if "history" not in st.session_state:
@@ -283,6 +289,47 @@ def generate_pdf(topic: str, report_md: str) -> bytes:
     return buf.getvalue()
 
 
+# ── HTML 인쇄용 렌더러 (브라우저 print → PDF, 한국어 완벽 지원) ────────
+def generate_print_html(topic: str, report_md: str, generated_at: str = "") -> str:
+    """서버의 pdf_renderer.py와 동일한 인쇄용 HTML 생성"""
+    from backend.utils.pdf_renderer import markdown_to_print_html
+    return markdown_to_print_html(
+        markdown_text=report_md,
+        title="Market Intelligence Report",
+        subtitle=topic,
+        generated_at=generated_at or datetime.now().strftime("%Y년 %m월 %d일"),
+    )
+
+
+def generate_agent_print_html(topic: str, output) -> str:
+    """에이전트 결과 인쇄용 HTML"""
+    from backend.utils.pdf_renderer import agent_to_print_html
+    return agent_to_print_html(output.model_dump(), topic)
+
+
+def agent_markdown(topic: str, output) -> str:
+    """에이전트 결과 Markdown"""
+    return f"""# {output.agent_name}
+## {topic}
+
+**Phase**: {output.phase.value}  **상태**: {output.status.value}
+**소요 시간**: {output.duration_seconds:.1f}초  **수집 데이터**: {output.data_points_collected}건
+**출처**: {', '.join(output.sources_used[:10])}
+
+---
+
+## 요약
+
+{output.summary}
+
+---
+
+## 상세 분석
+
+{output.analysis or '분석 내용 없음'}
+"""
+
+
 # ── Session state 헬퍼 ────────────────────────────────────────────────
 def _add_log(level: str, agent: str, message: str):
     now = datetime.now().strftime("%H:%M:%S")
@@ -398,17 +445,26 @@ def show_analysis_screen():
         with tab2:
             report_md = session.final_report or ""
             fname_base = f"MI_{topic[:20].replace(' ','_')}_{datetime.now().strftime('%Y%m%d')}"
-            dl_col1, dl_col2 = st.columns(2)
+            completed_str = datetime.now().strftime("%Y년 %m월 %d일")
+            dl_col1, dl_col2, dl_col3 = st.columns(3)
             with dl_col1:
+                st.download_button(
+                    "🖨️ HTML 다운로드 (브라우저 인쇄 → PDF)",
+                    data=generate_print_html(topic, report_md, completed_str).encode("utf-8"),
+                    file_name=f"{fname_base}.html",
+                    mime="text/html",
+                    use_container_width=True,
+                    type="primary",
+                )
+            with dl_col2:
                 st.download_button(
                     "⬇️ PDF 다운로드",
                     data=generate_pdf(topic, report_md),
                     file_name=f"{fname_base}.pdf",
                     mime="application/pdf",
                     use_container_width=True,
-                    type="primary",
                 )
-            with dl_col2:
+            with dl_col3:
                 st.download_button(
                     "⬇️ Markdown 다운로드",
                     data=report_md.encode("utf-8"),
@@ -416,6 +472,7 @@ def show_analysis_screen():
                     mime="text/markdown",
                     use_container_width=True,
                 )
+            st.caption("💡 HTML 파일을 브라우저에서 열고 Ctrl+P → PDF로 저장하면 한국어 폰트가 가장 깔끔합니다.")
             st.markdown(report_md)
 
         with tab3:
@@ -431,6 +488,26 @@ def show_analysis_screen():
                     c2.metric("소요 시간",   f"{output.duration_seconds:.1f}초")
                     c3.metric("품질",        quality.upper())
                     st.caption(f"**요약**: {output.summary}")
+                    # 에이전트별 다운로드
+                    a_col1, a_col2 = st.columns(2)
+                    with a_col1:
+                        st.download_button(
+                            "⬇️ HTML(인쇄용) 다운로드",
+                            data=generate_agent_print_html(topic, output).encode("utf-8"),
+                            file_name=f"{aid}_{topic[:15].replace(' ','_')}.html",
+                            mime="text/html",
+                            use_container_width=True,
+                            key=f"agent_html_{aid}",
+                        )
+                    with a_col2:
+                        st.download_button(
+                            "⬇️ Markdown 다운로드",
+                            data=agent_markdown(topic, output).encode("utf-8"),
+                            file_name=f"{aid}_{topic[:15].replace(' ','_')}.md",
+                            mime="text/markdown",
+                            use_container_width=True,
+                            key=f"agent_md_{aid}",
+                        )
                     st.divider()
                     st.markdown(output.analysis or "분석 내용 없음")
 
@@ -478,8 +555,17 @@ with st.form("analysis_form"):
         date_label = st.selectbox("분석 기간", list(DATE_OPTIONS.keys()), index=3)
         date_range = DATE_OPTIONS[date_label]
 
-    industries_input = st.text_input("산업 키워드 (쉼표 구분, 선택)",
-        placeholder="crypto, fintech, AI, blockchain")
+    col3, col4 = st.columns(2)
+    with col3:
+        industries_input = st.text_input("산업 키워드 (쉼표 구분, 선택)",
+            placeholder="crypto, fintech, AI, blockchain")
+    with col4:
+        regions_input = st.text_input("대상 지역 (쉼표 구분, 선택)",
+            placeholder="KR, US, Global", value="KR, US, Global")
+
+    custom_instructions = st.text_area("추가 지시사항 (선택)",
+        placeholder="특정 분석 관점이나 추가 요청사항을 입력하세요. 예: 두나무 관점에서 기회/위협 중심으로 분석",
+        height=72)
 
     submitted = st.form_submit_button("🚀 MI 분석 시작", use_container_width=True, type="primary")
 
@@ -489,6 +575,8 @@ if submitted and topic:
     target_companies = [c.strip() for c in companies_input.split(",") if c.strip()]
     industries = [i.strip() for i in industries_input.split(",") if i.strip()] or \
                  ["crypto", "fintech", "AI"]
+    regions = [r.strip() for r in regions_input.split(",") if r.strip()] or \
+              ["KR", "US", "Global"]
 
     # Session state 초기화
     st.session_state["_analysis_active"] = True
@@ -513,7 +601,9 @@ if submitted and topic:
         topic=topic,
         industries=industries,
         target_companies=target_companies,
+        regions=regions,
         date_range_days=date_range,
+        custom_instructions=custom_instructions or None,
     )
 
     _ctx = get_script_run_ctx()
