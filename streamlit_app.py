@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 from datetime import datetime
 
 import streamlit as st
+from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 
 st.set_page_config(
     page_title="Market Intelligence AI",
@@ -300,21 +302,39 @@ async def run_analysis():
     return await orch.run(scope=scope, session_id="streamlit-run")
 
 
-add_log("info", "시스템", "이벤트 루프 시작 중...")
-try:
+# ── 백그라운드 스레드에서 asyncio 실행 (Streamlit Cloud 호환) ──────────
+_ctx = get_script_run_ctx()
+_result: dict = {"session": None, "error": None}
+_done = threading.Event()
+
+
+def _run_analysis_thread():
+    add_script_run_ctx(threading.current_thread(), _ctx)
     _loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(_loop)
     try:
-        session = _loop.run_until_complete(run_analysis())
+        _result["session"] = _loop.run_until_complete(run_analysis())
+    except Exception as exc:
+        _result["error"] = exc
     finally:
         try:
             _loop.close()
         except Exception:
             pass
-except Exception as e:
-    import traceback
-    st.error(f"분석 실행 오류: {e}")
-    st.code(traceback.format_exc())
+        _done.set()
+
+
+_t = threading.Thread(target=_run_analysis_thread, daemon=True)
+_t.start()
+_done.wait()
+
+if _result["error"]:
+    import traceback as _tb
+    st.error(f"분석 실행 오류: {_result['error']}")
+    st.code(_tb.format_exc())
     st.stop()
+
+session = _result["session"]
 
 # ── 분석 이력 저장 ───────────────────────────────────────────────────
 duration_sec = (datetime.now() - start_time).total_seconds()
