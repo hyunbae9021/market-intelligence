@@ -7,10 +7,7 @@ import asyncio
 import os
 from datetime import datetime
 
-import nest_asyncio
 import streamlit as st
-
-nest_asyncio.apply()
 
 st.set_page_config(
     page_title="Market Intelligence AI",
@@ -246,24 +243,22 @@ scope = ResearchScope(
 )
 
 
+def _update_elapsed():
+    elapsed = int((datetime.now() - start_time).total_seconds())
+    m, s = elapsed // 60, elapsed % 60
+    elapsed_disp.caption(f"경과: {m}분 {s}초")
+
+
 async def run_analysis():
     from backend.orchestrator.mi_orchestrator import MIOrchestrator
 
     orch = MIOrchestrator(api_key=api_key)
 
-    async def _tick_elapsed():
-        while True:
-            elapsed = int((datetime.now() - start_time).total_seconds())
-            m, s = elapsed // 60, elapsed % 60
-            elapsed_disp.caption(f"경과: {m}분 {s}초")
-            await asyncio.sleep(1)
-
-    tick_task = asyncio.create_task(_tick_elapsed())
-
     async def ws_cb(msg: WSMessage):
         aid   = msg.agent_id or ""
         aname = msg.agent_name or "시스템"
         pct   = msg.progress_pct or 0
+        _update_elapsed()
 
         if msg.type == WSMessageType.AGENT_START:
             agent_states[aid] = "running"
@@ -302,15 +297,15 @@ async def run_analysis():
             add_log("info", "시스템", msg.message or "")
 
     orch.set_ws_callback(ws_cb)
-    result = await orch.run(scope=scope, session_id="streamlit-run")
-    tick_task.cancel()
-    return result
+    return await orch.run(scope=scope, session_id="streamlit-run")
 
 
 try:
     session = asyncio.run(run_analysis())
 except Exception as e:
+    import traceback
     st.error(f"분석 실행 오류: {e}")
+    st.code(traceback.format_exc())
     st.stop()
 
 # ── 분석 이력 저장 ───────────────────────────────────────────────────
