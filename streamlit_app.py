@@ -37,7 +37,6 @@ def check_password() -> bool:
         return True
 
     st.markdown("## 📊 Market Intelligence AI")
-    st.markdown("두나무 경영혁신실 내부 시스템입니다.")
     st.divider()
 
     col1, col2 = st.columns([3, 1])
@@ -101,8 +100,18 @@ with st.form("analysis_form"):
         companies_input = st.text_input("분석 대상 기업 (쉼표 구분, 선택)",
             placeholder="Coinbase, Binance, 빗썸, 두나무")
     with col2:
-        date_range = st.selectbox("분석 기간", [7, 30, 60, 90], index=2,
-            format_func=lambda x: f"최근 {x}일")
+        DATE_OPTIONS = {
+            "최근 7일": 7,
+            "최근 30일": 30,
+            "최근 60일": 60,
+            "최근 90일 (1분기)": 90,
+            "최근 180일 (반기)": 180,
+            "최근 365일 (1년)": 365,
+            "최근 730일 (2년)": 730,
+            "최근 1095일 (3년)": 1095,
+        }
+        date_label = st.selectbox("분석 기간", list(DATE_OPTIONS.keys()), index=3)
+        date_range = DATE_OPTIONS[date_label]
 
     industries_input = st.text_input("산업 키워드 (쉼표 구분, 선택)",
         placeholder="crypto, fintech, AI, blockchain")
