@@ -5,8 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import threading
-import time
 from datetime import datetime
 
 import streamlit as st
@@ -250,6 +248,15 @@ async def run_analysis():
 
     orch = MIOrchestrator(api_key=api_key)
 
+    async def _tick_elapsed():
+        while True:
+            elapsed = int((datetime.now() - start_time).total_seconds())
+            m, s = elapsed // 60, elapsed % 60
+            elapsed_disp.caption(f"경과: {m}분 {s}초")
+            await asyncio.sleep(1)
+
+    tick_task = asyncio.create_task(_tick_elapsed())
+
     async def ws_cb(msg: WSMessage):
         aid   = msg.agent_id or ""
         aname = msg.agent_name or "시스템"
@@ -292,25 +299,12 @@ async def run_analysis():
             add_log("info", "시스템", msg.message or "")
 
     orch.set_ws_callback(ws_cb)
-    return await orch.run(scope=scope, session_id="streamlit-run")
+    result = await orch.run(scope=scope, session_id="streamlit-run")
+    tick_task.cancel()
+    return result
 
-
-# 경과 시간 타이머 (1초마다 갱신)
-_stop_timer = threading.Event()
-
-def _timer_loop():
-    while not _stop_timer.is_set():
-        elapsed = int((datetime.now() - start_time).total_seconds())
-        m, s = elapsed // 60, elapsed % 60
-        elapsed_disp.caption(f"경과: {m}분 {s}초")
-        time.sleep(1)
-
-_timer_thread = threading.Thread(target=_timer_loop, daemon=True)
-_timer_thread.start()
 
 session = asyncio.run(run_analysis())
-
-_stop_timer.set()
 
 # ── 분석 이력 저장 ───────────────────────────────────────────────────
 duration_sec = (datetime.now() - start_time).total_seconds()
