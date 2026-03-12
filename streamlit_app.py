@@ -142,16 +142,29 @@ target_companies = [c.strip() for c in companies_input.split(",") if c.strip()]
 industries = [i.strip() for i in industries_input.split(",") if i.strip()] or \
              ["crypto", "fintech", "AI"]
 
-st.markdown(f"## 분석 중: **{topic}**")
-st.caption(f"시작: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} · 최근 {date_range}일")
+start_time = datetime.now()
+st.markdown(f"## 📊 {topic}")
 
-progress_bar   = st.progress(0, text="준비 중...")
-agent_panel    = st.empty()
-log_expander   = st.expander("실시간 로그", expanded=True)
+# 상단 상태 바
+status_col1, status_col2, status_col3, status_col4 = st.columns(4)
+status_badge  = status_col1.empty()
+current_agent = status_col2.empty()
+elapsed_disp  = status_col3.empty()
+done_count    = status_col4.empty()
+
+status_badge.info("🔄 **분석 실행 중**")
+current_agent.caption("현재: 준비 중...")
+elapsed_disp.caption(f"시작: {start_time.strftime('%H:%M:%S')}")
+done_count.caption("완료: 0 / 14")
+
+progress_bar    = st.progress(0, text="준비 중...")
+agent_panel     = st.empty()
+log_expander    = st.expander("📋 실시간 로그", expanded=True)
 log_placeholder = log_expander.empty()
 
 agent_states: dict[str, str] = {}
 log_lines: list[str] = []
+completed = [0]
 
 
 def render_agents():
@@ -160,7 +173,7 @@ def render_agents():
         state = agent_states.get(aid, "pending")
         css  = {"pending": "agent-pending", "running": "agent-running",
                 "done": "agent-done", "error": "agent-error"}.get(state, "agent-pending")
-        icon = {"pending": "○", "running": "◌", "done": "✓", "error": "✗"}.get(state, "○")
+        icon = {"pending": "○", "running": "⟳", "done": "✓", "error": "✗"}.get(state, "○")
         rows.append(
             f"<div class='agent-row {css}'>{icon} <b>Phase {phase}</b> · {aname}</div>"
         )
@@ -169,9 +182,12 @@ def render_agents():
 
 def add_log(level: str, agent: str, message: str):
     now  = datetime.now().strftime("%H:%M:%S")
+    elapsed = int((datetime.now() - start_time).total_seconds())
+    m, s = elapsed // 60, elapsed % 60
+    elapsed_disp.caption(f"경과: {m}분 {s}초")
     icon = {"info": "ℹ️", "success": "✅", "warn": "⚠️", "error": "❌"}.get(level, "ℹ️")
     log_lines.append(f"`{now}` {icon} **[{agent}]** {message}")
-    log_placeholder.markdown("\n\n".join(log_lines[-40:]))
+    log_placeholder.markdown("\n\n".join(log_lines[-50:]))
 
 
 render_agents()
@@ -201,18 +217,22 @@ async def run_analysis():
         if msg.type == WSMessageType.AGENT_START:
             agent_states[aid] = "running"
             render_agents()
-            progress_bar.progress(max(int(pct), 2), text=f"{aname} 실행 중...")
+            progress_bar.progress(max(int(pct), 2), text=f"⟳ {aname} 실행 중...")
+            current_agent.caption(f"현재: **{aname}**")
             add_log("info", aname, "시작")
 
         elif msg.type == WSMessageType.AGENT_PROGRESS:
-            progress_bar.progress(max(int(pct), 2), text=f"{aname}: {msg.message or ''}")
+            progress_bar.progress(max(int(pct), 2), text=f"⟳ {aname}: {msg.message or ''}")
+            current_agent.caption(f"현재: **{aname}** — {msg.message or ''}")
 
         elif msg.type == WSMessageType.AGENT_COMPLETE:
             agent_states[aid] = "done"
+            completed[0] += 1
             render_agents()
             dp  = (msg.data or {}).get("data_points", 0)
             dur = (msg.data or {}).get("duration", 0)
-            progress_bar.progress(int(pct), text=f"{aname} 완료 ({pct:.0f}%)")
+            progress_bar.progress(int(pct), text=f"✓ {aname} 완료 ({pct:.0f}%)")
+            done_count.caption(f"완료: **{completed[0]} / 14**")
             add_log("success", aname, f"완료 — {dp}개 데이터, {dur:.1f}초")
 
         elif msg.type == WSMessageType.AGENT_ERROR:
@@ -222,6 +242,9 @@ async def run_analysis():
 
         elif msg.type == WSMessageType.SESSION_COMPLETE:
             progress_bar.progress(100, text="✅ 분석 완료!")
+            status_badge.success("✅ **분석 완료**")
+            current_agent.caption("모든 에이전트 완료")
+            done_count.caption(f"완료: **14 / 14**")
             add_log("success", "시스템", "MI 분석 완료!")
 
         elif msg.type == WSMessageType.LOG:
