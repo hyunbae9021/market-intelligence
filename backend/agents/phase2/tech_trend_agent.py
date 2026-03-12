@@ -133,7 +133,7 @@ class TechTrendAgent(BaseAgent):
 - 커뮤니티 동향
 - 기업 채택 현황
 """
-        return await self._claude(system, prompt, max_tokens=4096)
+        return await self._claude(system, prompt, max_tokens=8192)
 
     async def validate(self, output, context: AgentContext) -> QualityReport:
         checks = []

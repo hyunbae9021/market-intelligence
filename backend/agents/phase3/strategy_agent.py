@@ -43,11 +43,11 @@ class StrategyAgent(BaseAgent):
         data = {"topic": context.scope.topic}
 
         # 핵심 분석 결과 수집
-        for agent_id in ["p3_insight", "p2_market", "p2_competitor", "p2_bizmodel", "p1_regulatory"]:
+        for agent_id in ["p3_insight", "p2_market", "p2_competitor", "p2_bizmodel", "p1_regulatory", "p1_news"]:
             if agent_id in prev:
                 data[agent_id] = {
                     "summary": prev[agent_id].summary,
-                    "analysis": (prev[agent_id].analysis or "")[:600],
+                    "analysis": (prev[agent_id].analysis or "")[:3000],
                 }
 
         return data
@@ -68,28 +68,35 @@ class StrategyAgent(BaseAgent):
 - Value Chain 관점에서 사업 기회를 분류하세요 (발행/유통/인프라/Use Case)
 반드시 한국어로 작성하고, Markdown 형식을 사용하세요."""
 
+        news_data = raw_data.get("p1_news", {})
+
         prompt = f"""
 리서치 주제: {context.scope.topic}
 분석 기간: 최근 {context.scope.date_range_days}일
 
-## 핵심 인사이트 요약
+## 핵심 인사이트 (Insight Agent 전체 분석)
 {insight_data.get('summary', '데이터 없음')}
-{insight_data.get('analysis', '')[:800]}
+{insight_data.get('analysis', '')[:4000]}
 
-## 시장 분석 요약
+## 시장 분석
 {market_data.get('summary', '')}
-{market_data.get('analysis', '')[:500]}
+{market_data.get('analysis', '')[:2000]}
 
-## 경쟁사 분석 요약
+## 경쟁사 분석
 {competitor_data.get('summary', '')}
-{competitor_data.get('analysis', '')[:500]}
+{competitor_data.get('analysis', '')[:2000]}
 
-## 규제 동향 요약
+## 규제 동향
 {regulatory_data.get('summary', '')}
+{regulatory_data.get('analysis', '')[:1500]}
 
-## 사업 기회 분석 요약
+## 사업 기회 분석
 {bizmodel_data.get('summary', '')}
-{bizmodel_data.get('analysis', '')[:400]}
+{bizmodel_data.get('analysis', '')[:2000]}
+
+## 최신 뉴스 동향
+{news_data.get('summary', '')}
+{news_data.get('analysis', '')[:1500]}
 
 위 분석을 바탕으로 다음 형식의 전략 시사점 리포트를 작성하세요:
 
@@ -163,7 +170,7 @@ class StrategyAgent(BaseAgent):
 > **메시지 2**: (수치 포함 핵심 리스크)
 > **메시지 3**: (즉각 결정이 필요한 사항)
 """
-        return await self._claude(system, prompt, max_tokens=4096)
+        return await self._claude(system, prompt, max_tokens=12000)
 
     async def validate(self, output, context: AgentContext) -> QualityReport:
         checks = []

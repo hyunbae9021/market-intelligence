@@ -95,4 +95,4 @@ class PMOAgent(BaseAgent):
 
 ## 5. 리스크 및 주의사항
 """
-        return await self._claude(system, prompt, max_tokens=2048)
+        return await self._claude(system, prompt, max_tokens=4000)

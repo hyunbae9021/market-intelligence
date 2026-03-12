@@ -121,7 +121,7 @@ class IndustryDataAgent(BaseAgent):
 - 긍정 시그널
 - 경고 시그널
 """
-        return await self._claude(system, prompt, max_tokens=3000)
+        return await self._claude(system, prompt, max_tokens=8000)
 
     async def validate(self, output, context: AgentContext) -> QualityReport:
         checks = []

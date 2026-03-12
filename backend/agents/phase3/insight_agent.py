@@ -60,7 +60,7 @@ class InsightAgent(BaseAgent):
                 synthesis["phase1_summaries"][agent_id] = {
                     "name": prev[agent_id].agent_name,
                     "summary": prev[agent_id].summary,
-                    "analysis": (prev[agent_id].analysis or "")[:800],
+                    "analysis": (prev[agent_id].analysis or "")[:3000],
                     "data_points": prev[agent_id].data_points_collected,
                 }
 
@@ -71,20 +71,20 @@ class InsightAgent(BaseAgent):
                 synthesis["phase2_summaries"][agent_id] = {
                     "name": prev[agent_id].agent_name,
                     "summary": prev[agent_id].summary,
-                    "analysis": (prev[agent_id].analysis or "")[:800],
+                    "analysis": (prev[agent_id].analysis or "")[:3000],
                 }
 
         synthesis["agents_completed"] = len(synthesis["phase1_summaries"]) + len(synthesis["phase2_summaries"])
         return synthesis
 
     async def analyze(self, context: AgentContext, raw_data: Dict[str, Any]) -> str:
-        p1_text = "\n\n".join([
-            f"### {v['name']}\n요약: {v['summary']}\n\n{v['analysis']}"
+        p1_text = "\n\n---\n\n".join([
+            f"### {v['name']} (데이터포인트: {v.get('data_points', 0)}개)\n**요약**: {v['summary']}\n\n{v['analysis']}"
             for v in raw_data.get("phase1_summaries", {}).values()
         ])
 
-        p2_text = "\n\n".join([
-            f"### {v['name']}\n요약: {v['summary']}\n\n{v['analysis']}"
+        p2_text = "\n\n---\n\n".join([
+            f"### {v['name']}\n**요약**: {v['summary']}\n\n{v['analysis']}"
             for v in raw_data.get("phase2_summaries", {}).values()
         ])
 
@@ -105,10 +105,10 @@ class InsightAgent(BaseAgent):
 분석에 참여한 에이전트: {total_agents}개
 
 ## Phase 1 (데이터 수집) 결과
-{p1_text[:3000] if p1_text else '데이터 없음'}
+{p1_text[:8000] if p1_text else '데이터 없음'}
 
 ## Phase 2 (심층 분석) 결과
-{p2_text[:3000] if p2_text else '데이터 없음'}
+{p2_text[:8000] if p2_text else '데이터 없음'}
 
 위 모든 분석 결과를 종합하여 다음 형식의 핵심 인사이트 리포트를 작성하세요:
 
@@ -173,7 +173,7 @@ class InsightAgent(BaseAgent):
 | 기술 성숙도 | | | |
 | **종합** | | | |
 """
-        return await self._claude(system, prompt, max_tokens=4096)
+        return await self._claude(system, prompt, max_tokens=12000)
 
     async def validate(self, output, context: AgentContext) -> QualityReport:
         checks = []

@@ -65,7 +65,7 @@ class ReportAgent(BaseAgent):
                 "quality": output.quality.overall.value if output.quality else "unknown",
             }
             if output.analysis:
-                report_data["key_analyses"][agent_id] = output.analysis[:1000]
+                report_data["key_analyses"][agent_id] = output.analysis[:3000]
 
         return report_data
 
@@ -78,11 +78,14 @@ class ReportAgent(BaseAgent):
         strategy_analysis = analyses.get("p3_strategy", "")
         market_analysis = analyses.get("p2_market", "")
         competitor_analysis = analyses.get("p2_competitor", "")
-        qa_analysis = analyses.get("p3_qa", "")
+        news_analysis = analyses.get("p1_news", "")
+        regulatory_analysis = analyses.get("p1_regulatory", "")
+        tech_analysis = analyses.get("p2_tech", "")
+        bizmodel_analysis = analyses.get("p2_bizmodel", "")
 
         # 전체 요약
         all_summaries = "\n".join([
-            f"- **{v['name']}**: {v['summary']}"
+            f"- **{v['name']}** [{v['quality']}]: {v['summary']}"
             for v in summaries.values()
         ])
 
@@ -103,20 +106,32 @@ McKinsey/BCG 수준의 시장 조사 리포트를 작성하세요.
 리포트 생성일: {raw_data.get('generated_at', '')}
 분석 기간: 최근 {context.scope.date_range_days}일
 
-## 각 에이전트 분석 요약
+## 전체 에이전트 실행 요약
 {all_summaries}
 
-## 핵심 인사이트 (Insight Agent)
-{insight_analysis[:2000]}
+## 핵심 인사이트 (Insight Agent 전체 분석)
+{insight_analysis[:4000]}
 
-## 전략 시사점 (Strategy Agent)
-{strategy_analysis[:2000]}
+## 전략 시사점 (Strategy Agent 전체 분석)
+{strategy_analysis[:4000]}
 
 ## 시장 분석 (Market Analysis Agent)
-{market_analysis[:1500]}
+{market_analysis[:2500]}
 
 ## 경쟁 분석 (Competitor Agent)
-{competitor_analysis[:1500]}
+{competitor_analysis[:2500]}
+
+## 뉴스 & 미디어 분석 (News Agent)
+{news_analysis[:1500]}
+
+## 규제 환경 분석 (Regulatory Agent)
+{regulatory_analysis[:1500]}
+
+## 기술 트렌드 분석 (Tech Agent)
+{tech_analysis[:1500]}
+
+## 사업 기회 분석 (BizModel Agent)
+{bizmodel_analysis[:1500]}
 
 위 내용을 바탕으로 다음 형식의 최종 MI 리포트를 작성하세요.
 **수치 없는 주장, 출처 없는 데이터는 작성하지 마세요.**
@@ -254,7 +269,7 @@ McKinsey/BCG 수준의 시장 조사 리포트를 작성하세요.
 *본 리포트는 14개 AI 에이전트가 수집/분석한 데이터를 기반으로 작성되었습니다.*
 *최종 의사결정 시 전문가 검토를 권장합니다.*
 """
-        return await self._claude(system, prompt, max_tokens=8000)
+        return await self._claude(system, prompt, max_tokens=16000)
 
     async def validate(self, output, context: AgentContext) -> QualityReport:
         checks = []

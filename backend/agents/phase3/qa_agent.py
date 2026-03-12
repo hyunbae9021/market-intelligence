@@ -231,7 +231,7 @@ class QAAgent(BaseAgent):
 - **Phase 4 진행 여부**: {'APPROVED ✅' if phase4_ok else 'RETRY REQUIRED ⚠️'}
 - **유효 기간 권고**: 이 리포트 데이터의 신선도 기준
 """
-        analysis = await self._claude(system, prompt, max_tokens=4000)
+        analysis = await self._claude(system, prompt, max_tokens=8000)
 
         # 구조화된 판정 데이터를 analysis에 첨부
         verdict = "PASS" if phase4_ok else "RETRY"

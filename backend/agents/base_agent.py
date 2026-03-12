@@ -200,7 +200,7 @@ class BaseAgent(ABC):
         self,
         system_prompt: str,
         user_prompt: str,
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
     ) -> str:
         """Claude API 호출 공통 메서드"""
         if not self._client:
@@ -227,7 +227,7 @@ class BaseAgent(ABC):
 다음 분석 결과를 3~5문장으로 요약하세요:
 {analysis[:3000]}
 """
-        return await self._claude(system, prompt, max_tokens=512)
+        return await self._claude(system, prompt, max_tokens=1024)
 
     def _count_data_points(self, raw_data: Dict[str, Any]) -> int:
         """수집된 데이터 포인트 수 계산"""
