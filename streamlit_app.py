@@ -68,6 +68,10 @@ if not api_key:
 os.environ["ANTHROPIC_API_KEY"] = api_key
 
 
+# ── 이력 초기화 ─────────────────────────────────────────────────────
+if "history" not in st.session_state:
+    st.session_state["history"] = []
+
 # ── 메인 UI ────────────────────────────────────────────────────────
 st.markdown("# 📊 Market Intelligence AI")
 st.caption("두나무 경영혁신실 · 14개 AI 에이전트 멀티스테이지 분석 플랫폼")
@@ -118,22 +122,57 @@ with st.form("analysis_form"):
 
     submitted = st.form_submit_button("🚀 MI 분석 시작", use_container_width=True, type="primary")
 
-# ── 분석 전 에이전트 소개 ────────────────────────────────────────────
+# ── 분석 전: 에이전트 소개 + 이력 ──────────────────────────────────
 if not submitted or not topic:
-    st.markdown("### 14개 분석 에이전트 구성")
-    cols = st.columns(4)
-    phases = {
-        "🔵 Phase 1 · 데이터 수집": [a[1] for a in AGENT_ORDER if a[2] == 1],
-        "🟣 Phase 2 · 심층 분석":   [a[1] for a in AGENT_ORDER if a[2] == 2],
-        "🟢 Phase 3 · 종합":        [a[1] for a in AGENT_ORDER if a[2] == 3],
-        "🟡 Phase 4 · 산출물":      [a[1] for a in AGENT_ORDER if a[2] == 4],
-    }
-    for i, (phase, agents) in enumerate(phases.items()):
-        with cols[i]:
-            st.markdown(f"**{phase}**")
-            for a in agents:
-                st.markdown(f"<div class='agent-row agent-pending'>● {a}</div>",
-                            unsafe_allow_html=True)
+    main_tab, history_tab = st.tabs(["🤖 에이전트 구성", "📂 분석 이력"])
+
+    with main_tab:
+        st.markdown("### 14개 분석 에이전트 구성")
+        cols = st.columns(4)
+        phases = {
+            "🔵 Phase 1 · 데이터 수집": [a[1] for a in AGENT_ORDER if a[2] == 1],
+            "🟣 Phase 2 · 심층 분석":   [a[1] for a in AGENT_ORDER if a[2] == 2],
+            "🟢 Phase 3 · 종합":        [a[1] for a in AGENT_ORDER if a[2] == 3],
+            "🟡 Phase 4 · 산출물":      [a[1] for a in AGENT_ORDER if a[2] == 4],
+        }
+        for i, (phase, agents) in enumerate(phases.items()):
+            with cols[i]:
+                st.markdown(f"**{phase}**")
+                for a in agents:
+                    st.markdown(f"<div class='agent-row agent-pending'>● {a}</div>",
+                                unsafe_allow_html=True)
+
+    with history_tab:
+        history = st.session_state["history"]
+        if not history:
+            st.info("아직 분석 기록이 없습니다. 위에서 주제를 입력하고 분석을 시작하세요.")
+        else:
+            st.markdown(f"### 총 {len(history)}건의 분석 기록")
+            for idx, h in enumerate(reversed(history)):
+                real_idx = len(history) - 1 - idx
+                dur_m = int(h["duration"] // 60)
+                dur_s = int(h["duration"] % 60)
+                label = f"**{h['date']}** · {h['topic']} · {h['date_range_label']} · {dur_m}분 {dur_s}초 소요"
+                with st.expander(label):
+                    t1, t2, t3 = st.tabs(["📋 Executive Summary", "📄 전체 리포트", "⬇️ 다운로드"])
+                    with t1:
+                        st.markdown(h["executive_summary"] or "요약 없음")
+                    with t2:
+                        st.markdown(h["final_report"] or "")
+                    with t3:
+                        report_md = h["final_report"] or ""
+                        fname = f"MI_{h['topic'][:20].replace(' ','_')}_{h['date'][:10].replace('-','')}.md"
+                        st.download_button(
+                            "⬇️ Markdown 다운로드",
+                            data=report_md.encode("utf-8"),
+                            file_name=fname,
+                            mime="text/markdown",
+                            key=f"dl_{real_idx}",
+                        )
+                    if st.button("🗑️ 이 기록 삭제", key=f"del_{real_idx}"):
+                        st.session_state["history"].pop(real_idx)
+                        st.rerun()
+
     st.stop()
 
 
@@ -255,6 +294,18 @@ async def run_analysis():
 
 
 session = asyncio.run(run_analysis())
+
+# ── 분석 이력 저장 ───────────────────────────────────────────────────
+duration_sec = (datetime.now() - start_time).total_seconds()
+st.session_state["history"].append({
+    "topic": topic,
+    "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    "date_range_label": date_label,
+    "date_range": date_range,
+    "duration": duration_sec,
+    "executive_summary": session.executive_summary,
+    "final_report": session.final_report,
+})
 
 progress_bar.progress(100, text="✅ 분석 완료!")
 st.success(f"분석 완료!")
