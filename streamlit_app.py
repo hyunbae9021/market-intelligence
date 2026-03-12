@@ -7,7 +7,10 @@ import asyncio
 import os
 from datetime import datetime
 
+import nest_asyncio
 import streamlit as st
+
+nest_asyncio.apply()
 
 st.set_page_config(
     page_title="Market Intelligence AI",
@@ -304,7 +307,11 @@ async def run_analysis():
     return result
 
 
-session = asyncio.run(run_analysis())
+try:
+    session = asyncio.run(run_analysis())
+except Exception as e:
+    st.error(f"분석 실행 오류: {e}")
+    st.stop()
 
 # ── 분석 이력 저장 ───────────────────────────────────────────────────
 duration_sec = (datetime.now() - start_time).total_seconds()
