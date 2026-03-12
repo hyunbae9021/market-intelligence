@@ -296,7 +296,7 @@ McKinsey/BCG 수준의 시장 조사 리포트를 작성하세요.
 ---
 """
         await self._notify("Part 1 생성 중 (표지/Executive Summary/시장/경쟁 분석)...", 0.3)
-        part1 = await self._claude(system, prompt_part1, max_tokens=32000)
+        part1 = await self._claude(system, prompt_part1, max_tokens=8192)
 
         # ── Part 2: 규제/기술 + 사업 기회 + 전략 권고 ──
         prompt_part2 = f"""
@@ -508,7 +508,7 @@ McKinsey/BCG 수준의 시장 조사 리포트를 작성하세요.
 ---
 """
         await self._notify("Part 2 생성 중 (규제/기술/사업기회/전략)...", 0.6)
-        part2 = await self._claude(system, prompt_part2, max_tokens=32000)
+        part2 = await self._claude(system, prompt_part2, max_tokens=8192)
 
         # ── Part 3: 상세 데이터 + 뉴스 클리핑 + 부록 ──
         prompt_part3 = f"""
@@ -699,7 +699,7 @@ McKinsey/BCG 수준의 시장 조사 리포트를 작성하세요.
 *DUNAMU 경영혁신실 — Confidential*
 """
         await self._notify("Part 3 생성 중 (뉴스 클리핑/인사이트/부록)...", 0.85)
-        part3 = await self._claude(system, prompt_part3, max_tokens=24000)
+        part3 = await self._claude(system, prompt_part3, max_tokens=8192)
 
         # ── 세 파트 합치기 ──
         final = f"""{part1}

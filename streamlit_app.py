@@ -373,7 +373,11 @@ def _run_analysis_thread():
 
 _t = threading.Thread(target=_run_analysis_thread, daemon=True)
 _t.start()
-_done.wait()
+_timed_out = not _done.wait(timeout=2700)  # 45분 타임아웃
+
+if _timed_out:
+    st.error("분석이 45분을 초과했습니다. 더 짧은 분석 기간을 선택하거나 다시 시도해 주세요.")
+    st.stop()
 
 if _result["error"]:
     import traceback as _tb
